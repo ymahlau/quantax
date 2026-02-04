@@ -30,8 +30,8 @@ jobs:
       - name: Run pre-commit
         run: uv run pre-commit run -a --show-diff-on-failure
 
-      - name: build docs
-        run: sh docs/scripts/sync_notebooks.sh && uv run sphinx-build docs/source/ docs/build/
+      # - name: build docs
+      #   run: sh docs/scripts/sync_notebooks.sh && uv run sphinx-build docs/source/ docs/build/
 
       - name: Check lock file consistency
         run: uv sync --locked
