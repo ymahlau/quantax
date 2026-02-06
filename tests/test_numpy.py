@@ -6,11 +6,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from quantax.fraction import Fraction
-from quantax.numpy import roll, sqrt, transpose, where
-from quantax.patching import patch_all_functions_jax
-from quantax.typing import SI
-from quantax.unitful import EMPTY_UNIT, Unit, Unitful
+from quantax.core.fraction import Fraction
+from quantax.core.typing import SI
+from quantax.functional.numpy import roll, sqrt, transpose, where
+from quantax.functional.patching import patch_all_functions_jax
+from quantax.unitful.unit import EMPTY_UNIT, Unit
+from quantax.unitful.unitful import Unitful
 
 patch_all_functions_jax()
 
@@ -34,7 +35,7 @@ def test_sqrt_unitful_odd_integer_dimensions():
     mass_cube_unit = Unit(scale=0, dim={SI.kg: 3})
     mass_cube = Unitful(val=jnp.array(8.0), unit=mass_cube_unit)
 
-    result = jax.lax.sqrt(mass_cube)
+    result = jax.lax.sqrt(mass_cube)  # ty:ignore[invalid-argument-type]
 
     assert isinstance(result, Unitful)
     assert jnp.allclose(result.value(), 2.828427124746190)  # sqrt(8) ≈ 2.828

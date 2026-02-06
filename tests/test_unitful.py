@@ -7,14 +7,12 @@ import numpy as np
 import plum
 import pytest
 
-import quantax.unitful as unitful
-from quantax.fraction import Fraction
-from quantax.patching import patch_all_functions_jax
-from quantax.pytrees import TreeClass, autoinit
-from quantax.unitful import (
-    SI,
-    Unit,
-    Unitful,
+from quantax.core import flags
+from quantax.core.fraction import Fraction
+from quantax.core.pytrees import TreeClass, autoinit
+from quantax.core.typing import SI
+from quantax.core.utils import is_currently_compiling
+from quantax.functional import (
     add,
     eq,
     ge,
@@ -29,8 +27,10 @@ from quantax.unitful import (
     squeeze,
     subtract,
 )
+from quantax.functional.patching import patch_all_functions_jax
+from quantax.unitful.unit import Unit
+from quantax.unitful.unitful import Unitful
 from quantax.units import Hz, ms, s
-from quantax.utils import is_currently_compiling
 
 patch_all_functions_jax()
 
@@ -2448,10 +2448,10 @@ def test_argmax_jitted_static():
     x = Unitful(val=jnp.asarray([1.0, 100.0, 213.0]), unit=speed_unit, static_arr=np.array([1.0, 99.0, 212.0]))
 
     def fn(x: Unitful) -> Unitful:
-        if is_currently_compiling() and not unitful.STATIC_OPTIM_STOP_FLAG:
+        if is_currently_compiling() and not flags.STATIC_OPTIM_STOP_FLAG:
             assert x.static_arr is not None
         result = x.argmax()
-        if is_currently_compiling() and not unitful.STATIC_OPTIM_STOP_FLAG:
+        if is_currently_compiling() and not flags.STATIC_OPTIM_STOP_FLAG:
             assert result.static_arr is not None
         return result
 

@@ -1,5 +1,6 @@
-from quantax.typing import SI
-from quantax.unitful import Unit, Unitful
+from quantax.core.typing import SI
+from quantax.unitful.unit import Unit
+from quantax.unitful.unitful import Unitful
 
 s_unit = Unit(scale=0, dim={SI.s: 1})
 ms_unit = Unit(scale=-3, dim={SI.s: 1})

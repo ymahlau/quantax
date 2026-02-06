@@ -6,9 +6,12 @@ import jax.numpy as jnp
 import numpy as np
 from frozendict import frozendict
 from jax import core
+from jaxtyping import ArrayLike
 
-from quantax.fraction import Fraction
-from quantax.typing import SI, PhysicalArrayLike
+from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
+from quantax.core.flags import STATIC_OPTIM_STOP_FLAG
+from quantax.core.fraction import Fraction
+from quantax.core.typing import SI, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
 
 
 def handle_n_scales(
@@ -192,3 +195,22 @@ def hash_abstract_pytree(tree) -> int:
     flat_avals, treedef = jax.tree.flatten(avals)
     flat_avals_tuple = tuple(flat_avals)
     return hash((flat_avals_tuple, treedef))
+
+
+def can_perform_static_ops(x: StaticArrayLike | None):
+    if x is None:
+        return False
+    if isinstance(x, NonPhysicalArrayLike):
+        return False
+    return True
+
+
+def output_unitful_for_array(static_arr: ArrayLike | jax.ShapeDtypeStruct | None) -> bool:
+    if static_arr is None:
+        return False
+    if is_traced(static_arr):
+        return False
+    if isinstance(static_arr, jax.Array | np.ndarray | jax.ShapeDtypeStruct):
+        if static_arr.size > MAX_STATIC_OPTIMIZED_SIZE:
+            return False
+    return is_currently_compiling() and not STATIC_OPTIM_STOP_FLAG

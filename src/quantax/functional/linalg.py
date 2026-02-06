@@ -5,9 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 from plum import dispatch, overload
 
-from quantax.typing import PhysicalArrayLike
-from quantax.unitful import Unitful, get_static_operand
-from quantax.utils import is_traced
+from quantax.core.typing import PhysicalArrayLike
+from quantax.core.utils import is_traced
+from quantax.unitful.unitful import Unitful, get_static_operand
 
 
 ## norm #####################################

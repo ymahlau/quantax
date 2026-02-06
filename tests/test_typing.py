@@ -3,8 +3,8 @@ import functools
 import jax.numpy as jnp
 import numpy as np
 
-from quantax.patching import patch_all_functions_jax
-from quantax.typing import PHYSICAL_DTYPES
+from quantax.core.typing import PHYSICAL_DTYPES
+from quantax.functional.patching import patch_all_functions_jax
 
 patch_all_functions_jax()
 

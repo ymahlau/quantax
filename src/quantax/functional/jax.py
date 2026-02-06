@@ -3,9 +3,9 @@ from typing import Any, Callable
 
 import jax
 
-from quantax import unitful
-from quantax.unitful import Unitful
-from quantax.utils import hash_abstract_pytree
+from quantax.core import flags
+from quantax.core.utils import hash_abstract_pytree
+from quantax.unitful.unitful import Unitful
 
 
 class CustomJitWrapped:
@@ -41,7 +41,7 @@ class CustomJitWrapped:
     ):
         # first get shape dtypes without any array to unitful optimizations
         # The functools.partial prevents jax from caching the function call
-        unitful.STATIC_OPTIM_STOP_FLAG = True
+        flags.STATIC_OPTIM_STOP_FLAG = True
         desired_shape_dtype = jax.eval_shape(
             jax._orig_jit(  # type: ignore
                 partial(self.fun), **self.jit_kwargs
@@ -56,7 +56,7 @@ class CustomJitWrapped:
         )
 
         # then get the result of the actual jit step
-        unitful.STATIC_OPTIM_STOP_FLAG = False
+        flags.STATIC_OPTIM_STOP_FLAG = False
         optimized_shape_dtype = jax.eval_shape(
             jax._orig_jit(  # type: ignore
                 partial(self.fun), **self.jit_kwargs

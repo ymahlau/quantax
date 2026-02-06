@@ -15,7 +15,7 @@ from pytreeclass._src.code_build import (
 )
 from pytreeclass._src.tree_base import TreeClassIndexer
 
-from quantax.null import CUSTOM_NULL
+from quantax.core.null import CUSTOM_NULL
 
 
 def safe_hasattr(obj, name) -> bool:

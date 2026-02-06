@@ -1,9 +1,10 @@
 import jax
 import jax.numpy as jnp
 
-from quantax.patching import patch_all_functions_jax
-from quantax.typing import SI
-from quantax.unitful import Unit, Unitful
+from quantax.core.typing import SI
+from quantax.functional.patching import patch_all_functions_jax
+from quantax.unitful.unit import Unit
+from quantax.unitful.unitful import Unitful
 
 patch_all_functions_jax()
 

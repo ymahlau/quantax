@@ -1,0 +1,504 @@
+from __future__ import annotations
+
+# from numbers import Number
+from typing import TYPE_CHECKING, Any, Self
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jaxtyping import ArrayLike
+from plum import add_conversion_method
+from pytreeclass import tree_repr
+
+# ruff: noqa: F811
+from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
+from quantax.core.flags import STATIC_OPTIM_STOP_FLAG
+from quantax.core.fraction import Fraction
+from quantax.core.pytrees import TreeClass, autoinit, frozen_field
+from quantax.core.typing import (
+    PHYSICAL_DTYPES,
+    NonPhysicalArrayLike,
+    PhysicalArrayLike,
+    RealPhysicalArrayLike,
+    StaticArrayLike,
+    StaticPhysicalArrayLike,
+)
+from quantax.core.utils import (
+    best_scale,
+    handle_different_scales,
+    is_currently_compiling,
+    is_traced,
+)
+from quantax.unitful.unit import Unit
+
+if TYPE_CHECKING:
+    from quantax.unitful.indexing import UnitfulIndexer
+
+
+@autoinit
+class Unitful(TreeClass):
+    val: ArrayLike
+    unit: Unit = frozen_field()
+    optimize_scale: bool = frozen_field(default=True)
+    static_arr: StaticArrayLike | None = frozen_field(default=None)
+
+    def _validate(self):
+        bad_dtype = isinstance(self.val, jax.Array | np.ndarray | np.number) and self.dtype not in PHYSICAL_DTYPES
+        if isinstance(self.val, NonPhysicalArrayLike) or bad_dtype:
+            if self.unit.scale != 0:
+                if isinstance(self.val, int):
+                    raise Exception(f"Cannot have non-zero scale for integer {self}. Consider using float as input.")
+                else:
+                    raise Exception(f"Cannot have non-zero scale for non-physical {self}")
+            if self.unit.dim != {}:
+                if isinstance(self.val, int):
+                    raise Exception(
+                        f"Cannot have non-empty dimension for integer {self}. Consider using float as input."
+                    )
+                else:
+                    raise Exception(f"Cannot have non-empty dimension for non-physical {self}")
+
+    def __post_init__(self):
+        self._validate()
+        if not self.optimize_scale or not can_optimize_scale(self):
+            return
+        orig_val = self.val
+        if is_traced(self.val):
+            # if value is traced then optimize with static array
+            assert self.static_arr is not None and isinstance(self.static_arr, StaticPhysicalArrayLike)
+            optimized_val, power = best_scale(self.static_arr, self.unit.scale)
+            assert isinstance(optimized_val, StaticPhysicalArrayLike)
+            self.static_arr = optimized_val
+            self.val = self.val * (10**power)
+        else:
+            # non-traced case: optimize scale
+            assert isinstance(self.val, PhysicalArrayLike)
+            optimized_val, power = best_scale(self.val, self.unit.scale)
+            self.val = optimized_val
+        new_scale = self.unit.scale - power
+        self.unit = Unit(scale=new_scale, dim=self.unit.dim)
+        # special case: The value might have been static jax array within jit context and scale optimization converted
+        # it to tracer. In this case, create a static array from the original array
+        if not is_traced(orig_val) and is_traced(self.val):
+            self.static_arr = get_static_operand(orig_val) * (10**power)
+
+    def materialise(self) -> ArrayLike:
+        if self.unit.dim:
+            raise ValueError(f"Cannot materialise unitful array with a non-zero unit: {self.unit}")
+        return self.value()
+
+    def float_materialise(self) -> float:
+        v = self.materialise()
+        assert isinstance(v, float), f"safe float_materialise called on Unitful with non-float value: {self}"
+        return v
+
+    def array_materialise(self) -> jax.Array:
+        v = self.materialise()
+        assert isinstance(v, jax.Array), f"safe array_materialise called on Unitful with non-array value: {self}"
+        return v
+
+    def value(self) -> ArrayLike:
+        scale = self.unit.scale
+        if isinstance(scale, Fraction):
+            scale = scale.value()
+        if scale == 0:
+            return self.val
+        return self.val * (10**scale)
+
+    def array_value(self) -> jax.Array:
+        v = self.value()
+        assert isinstance(v, jax.Array), f"safe array_value called on Unitful with non-array value: {self}"
+        return v
+
+    def float_value(self) -> float:
+        v = self.value()
+        assert isinstance(v, float), f"safe float_value called on Unitful with non-float value: {self}"
+        return v
+
+    def static_value(self) -> StaticArrayLike | None:
+        if self.static_arr is None:
+            return None
+        scale = self.unit.scale
+        if isinstance(scale, Fraction):
+            scale = scale.value()
+        return self.static_arr * (10**scale)
+
+    @property
+    def at(self) -> UnitfulIndexer:
+        """Gets the indexer for this tree.
+
+        Returns:
+            UnitfulIndexer: Indexer that preserves type information
+        """
+        from quantax.unitful.indexing import UnitfulIndexer
+
+        return UnitfulIndexer(self)
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        if isinstance(self.val, int | float | complex | bool):
+            return ()
+        return self.val.shape
+
+    @property
+    def dtype(self):
+        if isinstance(self.val, int | float | complex | bool):
+            raise Exception("Python scalar does not have dtype attribute")
+        return self.val.dtype
+
+    @property
+    def ndim(self):
+        if isinstance(self.val, int | float | complex | bool):
+            return 0
+        return self.val.ndim
+
+    @property
+    def size(self):
+        if isinstance(self.val, int | float | complex | bool):
+            return 1
+        return self.val.size
+
+    @property
+    def T(self):
+        raise NotImplementedError("TODO: call transpose here")
+        # if not isinstance(self.val, jax.Array | np.ndarray | np.number | np.bool):
+        #     raise Exception(f"Cannot call .T on {self}")
+        # new_val = self.val.T
+        # new_static_arr = None
+        # if is_traced(new_val):
+        #     arr = get_static_operand(self)
+        #     if arr is not None:
+        #         assert isinstance(arr, np.ndarray | np.number | np.bool)
+        #         new_static_arr = arr.T
+        # return Unitful(val=new_val, unit=self.unit, static_arr=new_static_arr)
+
+    def aset(
+        self,
+        attr_name: str,
+        val: Any,
+        create_new_ok: bool = False,
+    ) -> Self:
+        del attr_name, val, create_new_ok
+        raise Exception(
+            "the aset-method is unsafe for Unitful internals and therefore not implemented. "
+            "Please use .at[].set() intead. Note that using aset on structures containing unitful is safe and "
+            " implemented, just the internals of Unitful should not changed this way."
+        )
+
+    def astype(self, *args, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import astype
+
+        return astype(self, *args, **kwargs)
+
+    def squeeze(
+        self,
+        axis: int | None = None,
+    ) -> "Unitful":
+        from quantax.functional.numpy import squeeze
+
+        return squeeze(self, axis)
+
+    def reshape(
+        self,
+        *args,
+        **kwargs,
+    ) -> "Unitful":
+        from quantax.functional.numpy import reshape
+
+        return reshape(self, args, **kwargs)
+
+    def __str__(self) -> str:
+        try:
+            return f"Unitful [{self.unit}]: {tree_repr(self.val)}"
+        except Exception:
+            return f"Unitful [{self.unit}]: {self.shape}"
+
+    def __bool__(self) -> bool:
+        if isinstance(self.val, (bool, np.bool_, jnp.bool_)):
+            return bool(self.val)
+        if isinstance(self.val, (np.ndarray, jnp.ndarray)):
+            if self.val.size != 1:
+                raise ValueError("Truth value of an array with multiple elements is ambiguous")
+            return bool(self.val.item())
+        return bool(self.val)
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __mul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
+        from quantax.functional.numpy import multiply
+
+        return multiply(self, other)
+
+    def __rmul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
+        from quantax.functional.numpy import multiply
+
+        return multiply(other, self)
+
+    def __truediv__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
+        from quantax.functional.numpy import divide
+
+        return divide(self, other)
+
+    def __rtruediv__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
+        from quantax.functional.numpy import divide
+
+        return divide(other, self)
+
+    def __add__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import add
+
+        return add(self, other)
+
+    def __radd__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import add
+
+        return add(self, other)
+
+    def __sub__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import subtract
+
+        return subtract(self, other)
+
+    def __rsub__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import subtract
+
+        return subtract(other, self)
+
+    def __lt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import lt
+
+        return lt(self, other)
+
+    def __le__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import le
+
+        return le(self, other)
+
+    def __eq__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]
+        from quantax.functional.numpy import eq
+
+        return eq(self, other)
+
+    def __ne__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]  # allow non-bool return for array-style comparison
+        from quantax.functional.numpy import ne
+
+        return ne(self, other)
+
+    def __ge__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import ge
+
+        return ge(self, other)
+
+    def __gt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        from quantax.functional.numpy import gt
+
+        return gt(self, other)
+
+    def __len__(self):
+        if not isinstance(self.val, jax.Array | np.ndarray):
+            return 1
+        return len(self.val)
+
+    def __getitem__(self, key: Any) -> "Unitful":
+        """Enable numpy-style indexing"""
+        if not isinstance(self.val, jax.Array | np.ndarray):
+            raise Exception(f"Cannot slice Unitful with python scalar value ({self.val})")
+        if isinstance(key, Unitful):
+            key = key.materialise()
+        if isinstance(key, tuple):
+            new_list = []
+            for k in key:
+                if isinstance(k, Unitful):
+                    new_list.append(k.materialise())
+                else:
+                    new_list.append(k)
+            key = tuple(new_list)
+        new_val = self.val[key]  # ty:ignore[invalid-argument-type]
+        return Unitful(val=new_val, unit=self.unit)
+
+    def __iter__(self):
+        """Use a generator for simplicity"""
+        if not isinstance(self.val, jax.Array | np.ndarray):
+            raise Exception(f"Cannot iterate over Unitful with python scalar value ({self.val})")
+        for v in self.val:
+            yield (Unitful(val=v, unit=self.unit))
+
+    def __reversed__(self):
+        return iter(self[::-1])
+
+    def __neg__(self):
+        if isinstance(self.val, NonPhysicalArrayLike):
+            raise Exception(f"Cannot perform negation on non-physcal value {self}")
+        return Unitful(val=-self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
+
+    def __pos__(self):
+        """Unary plus: +x"""
+        if isinstance(self.val, NonPhysicalArrayLike):
+            raise Exception(f"Cannot perform unary plus on non-physcal value {self}")
+        return Unitful(val=+self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
+
+    def __abs__(self):
+        from quantax.functional.numpy import abs_impl
+
+        return abs_impl(self)
+
+    def __matmul__(self, other: "Unitful") -> "Unitful":
+        from quantax.functional.numpy import matmul
+
+        return matmul(self, other)
+
+    def __pow__(self, other: int) -> "Unitful":
+        from quantax.functional.numpy import pow
+
+        return pow(self, other)
+
+    def min(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import min
+
+        return min(self, **kwargs)
+
+    def max(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import max
+
+        return max(self, **kwargs)
+
+    def mean(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import mean
+
+        return mean(self, **kwargs)
+
+    def sum(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import sum
+
+        return sum(self, **kwargs)
+
+    def prod(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import prod
+
+        return prod(self, **kwargs)
+
+    def argmax(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import argmax
+
+        return argmax(self, **kwargs)
+
+    def argmin(self, **kwargs) -> "Unitful":
+        from quantax.functional.numpy import argmin
+
+        return argmin(self, **kwargs)
+
+
+# This conversion method is necessary, because within jit-context we lie to the dispatcher.
+# Specifically, functions that are supposed to return a jax array will return a unitful to be able to perform
+# scale optimization.
+def unitful_to_array_conversion(obj: Unitful):
+    assert obj.unit.dim == {}
+    if is_currently_compiling():
+        return obj
+    return obj.array_materialise()
+
+
+add_conversion_method(type_from=Unitful, type_to=jax.Array, f=unitful_to_array_conversion)
+
+
+def unitful_to_array_conversion_with_bool(obj: Unitful) -> np.bool | np.ndarray | jax.Array | bool:
+    assert obj.unit.dim == {}
+    if is_currently_compiling():
+        result: np.bool | np.ndarray | jax.Array | bool = obj  # type: ignore
+    else:
+        result: np.bool | np.ndarray | jax.Array | bool = obj.materialise()  # type: ignore
+    return result
+
+
+add_conversion_method(
+    type_from=Unitful,
+    type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
+    f=unitful_to_array_conversion_with_bool,
+)
+
+
+def align_scales(
+    u1: Unitful,
+    u2: Unitful,
+) -> tuple[Unitful, Unitful]:
+    if u1.unit.dim != u2.unit.dim:
+        raise Exception("Cannot align arrays with different units")
+    # non physical ArrayLikes need to keep scale 0
+    force_zero_scale = False
+    if not u1.optimize_scale or not can_optimize_scale(u1):
+        assert u1.unit.scale == 0
+        force_zero_scale = True
+    if not u2.optimize_scale or not can_optimize_scale(u2):
+        assert u2.unit.scale == 0
+        force_zero_scale = True
+    # calculate new scale
+    if force_zero_scale:
+        new_scale, factor1, factor2 = 0, 10**u1.unit.scale, 10**u2.unit.scale
+    else:
+        new_scale, factor1, factor2 = handle_different_scales(
+            u1.unit.scale,
+            u2.unit.scale,
+        )
+    # update unitfuls
+    if new_scale != u1.unit.scale:
+        u1 = Unitful(
+            val=u1.val * factor1,
+            unit=Unit(scale=new_scale, dim=u1.unit.dim),
+            optimize_scale=False,
+            static_arr=None if u1.static_arr is None else u1.static_arr * factor1,
+        )
+    if new_scale != u2.unit.scale:
+        u2 = Unitful(
+            val=u2.val * factor2,
+            unit=Unit(scale=new_scale, dim=u2.unit.dim),
+            optimize_scale=False,
+            static_arr=None if u2.static_arr is None else u2.static_arr * factor2,
+        )
+    return u1, u2
+
+
+def get_static_operand(
+    x: Unitful | ArrayLike,
+) -> StaticArrayLike | None:
+    if STATIC_OPTIM_STOP_FLAG:
+        return None
+    # Physical arraylike without a unit
+    if isinstance(x, ArrayLike):
+        if is_traced(x):
+            return None
+        if isinstance(x, jax.Array):
+            if x.size >= MAX_STATIC_OPTIMIZED_SIZE:
+                return None
+            return np.asarray(x, copy=True)
+        assert isinstance(x, StaticArrayLike), "Internal error, please report"
+        return x
+    # Unitful
+    x_arr = None
+    if x.static_arr is not None:
+        x_arr = x.static_arr
+    elif not is_traced(x.val):
+        x_arr = x.val
+        if isinstance(x_arr, jax.Array):
+            if x_arr.size >= MAX_STATIC_OPTIMIZED_SIZE:
+                return None
+            x_arr = np.asarray(x_arr, copy=True)
+    assert x_arr is None or isinstance(x_arr, StaticArrayLike)
+    return x_arr
+
+
+def can_optimize_scale(obj: Unitful | ArrayLike) -> bool:
+    v = obj.val if isinstance(obj, Unitful) else obj
+    if isinstance(v, NonPhysicalArrayLike):
+        return False
+    if isinstance(v, jax.Array | np.ndarray) and v.dtype not in PHYSICAL_DTYPES:
+        return False
+    if is_traced(v) and not isinstance(obj, Unitful):
+        return False
+    if is_traced(v):
+        assert isinstance(obj, Unitful)
+        if obj.static_arr is None:
+            return False
+        if not can_optimize_scale(obj.static_arr):
+            return False
+    return True
