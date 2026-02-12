@@ -9,7 +9,7 @@ from jax import core
 from jaxtyping import ArrayLike
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.flags import STATIC_OPTIM_STOP_FLAG
+from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.fraction import Fraction
 from quantax.core.typing import SI, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
 

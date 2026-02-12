@@ -1,4 +1,6 @@
 # ruff: noqa: F811
+from quantax.core.glob import register_node
+from quantax.functional.utils import get_static_operand
 import cmath
 import math
 from typing import Sequence
@@ -24,10 +26,33 @@ from quantax.unitful.unit import (
     EMPTY_UNIT,
     Unit,
 )
-from quantax.unitful.unitful import Unitful, align_scales, can_optimize_scale, get_static_operand
+from quantax.unitful.unitful import Unitful, can_optimize_scale
+from quantax.unitful.tracer import UnitfulTracer, OperatorNode
 
 
 ## Multiplication ###########################
+@overload
+def multiply(
+    x: UnitfulTracer,
+    y: UnitfulTracer,
+) -> UnitfulTracer:
+    unit_dict = dim_after_multiplication(x.unit.dim, y.unit.dim)
+    new_scale = x.unit.scale + y.unit.scale
+    x_arr = get_static_operand(x)
+    y_arr = get_static_operand(y)
+    new_static_arr = None
+    if x_arr is not None and y_arr is not None:
+        new_static_arr = x_arr * y_arr
+    node = OperatorNode(
+        op_name="multiply",
+        args={'x': x, 'y': y},
+    )
+    result = UnitfulTracer(unit=Unit(scale=new_scale, dim=unit_dict), parent=node, static_arr=new_static_arr)
+    node.output_tracer = (result,)
+    register_node(node)
+    return result
+
+
 @overload
 def multiply(
     x: Unitful,
@@ -36,14 +61,26 @@ def multiply(
     unit_dict = dim_after_multiplication(x.unit.dim, y.unit.dim)
     new_val = x.val * y.val
     new_scale = x.unit.scale + y.unit.scale
-    # if static arrays exist, perform mul with static arrs
-    new_static_arr = None
-    if is_traced(new_val):
-        x_arr = get_static_operand(x)
-        y_arr = get_static_operand(y)
-        if x_arr is not None and y_arr is not None:
-            new_static_arr = x_arr * y_arr
-    return Unitful(val=new_val, unit=Unit(scale=new_scale, dim=unit_dict), static_arr=new_static_arr)
+    return Unitful(val=new_val, unit=Unit(scale=new_scale, dim=unit_dict))
+
+
+
+# @overload
+# def multiply(
+#     x: Unitful,
+#     y: Unitful,
+# ) -> Unitful:
+#     unit_dict = dim_after_multiplication(x.unit.dim, y.unit.dim)
+#     new_val = x.val * y.val
+#     new_scale = x.unit.scale + y.unit.scale
+#     # if static arrays exist, perform mul with static arrs
+#     new_static_arr = None
+#     if is_traced(new_val):
+#         x_arr = get_static_operand(x)
+#         y_arr = get_static_operand(y)
+#         if x_arr is not None and y_arr is not None:
+#             new_static_arr = x_arr * y_arr
+#     return Unitful(val=new_val, unit=Unit(scale=new_scale, dim=unit_dict), static_arr=new_static_arr)
 
 
 @overload

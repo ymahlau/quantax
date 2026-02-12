@@ -12,7 +12,7 @@ from pytreeclass import tree_repr
 
 # ruff: noqa: F811
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.flags import STATIC_OPTIM_STOP_FLAG
+from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.fraction import Fraction
 from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import (
@@ -40,7 +40,6 @@ class Unitful(TreeClass):
     val: ArrayLike
     unit: Unit = frozen_field()
     optimize_scale: bool = frozen_field(default=True)
-    static_arr: StaticArrayLike | None = frozen_field(default=None)
 
     def _validate(self):
         bad_dtype = isinstance(self.val, jax.Array | np.ndarray | np.number) and self.dtype not in PHYSICAL_DTYPES
@@ -79,8 +78,8 @@ class Unitful(TreeClass):
         self.unit = Unit(scale=new_scale, dim=self.unit.dim)
         # special case: The value might have been static jax array within jit context and scale optimization converted
         # it to tracer. In this case, create a static array from the original array
-        if not is_traced(orig_val) and is_traced(self.val):
-            self.static_arr = get_static_operand(orig_val) * (10**power)
+        # if not is_traced(orig_val) and is_traced(self.val):
+        #     self.static_arr = get_static_operand(orig_val) * (10**power)
 
     def materialise(self) -> ArrayLike:
         if self.unit.dim:
@@ -227,7 +226,6 @@ class Unitful(TreeClass):
 
     def __mul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
         from quantax.functional.numpy import multiply
-
         return multiply(self, other)
 
     def __rmul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
@@ -416,76 +414,6 @@ add_conversion_method(
     type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
     f=unitful_to_array_conversion_with_bool,
 )
-
-
-def align_scales(
-    u1: Unitful,
-    u2: Unitful,
-) -> tuple[Unitful, Unitful]:
-    if u1.unit.dim != u2.unit.dim:
-        raise Exception("Cannot align arrays with different units")
-    # non physical ArrayLikes need to keep scale 0
-    force_zero_scale = False
-    if not u1.optimize_scale or not can_optimize_scale(u1):
-        assert u1.unit.scale == 0
-        force_zero_scale = True
-    if not u2.optimize_scale or not can_optimize_scale(u2):
-        assert u2.unit.scale == 0
-        force_zero_scale = True
-    # calculate new scale
-    if force_zero_scale:
-        new_scale, factor1, factor2 = 0, 10**u1.unit.scale, 10**u2.unit.scale
-    else:
-        new_scale, factor1, factor2 = handle_different_scales(
-            u1.unit.scale,
-            u2.unit.scale,
-        )
-    # update unitfuls
-    if new_scale != u1.unit.scale:
-        u1 = Unitful(
-            val=u1.val * factor1,
-            unit=Unit(scale=new_scale, dim=u1.unit.dim),
-            optimize_scale=False,
-            static_arr=None if u1.static_arr is None else u1.static_arr * factor1,
-        )
-    if new_scale != u2.unit.scale:
-        u2 = Unitful(
-            val=u2.val * factor2,
-            unit=Unit(scale=new_scale, dim=u2.unit.dim),
-            optimize_scale=False,
-            static_arr=None if u2.static_arr is None else u2.static_arr * factor2,
-        )
-    return u1, u2
-
-
-def get_static_operand(
-    x: Unitful | ArrayLike,
-) -> StaticArrayLike | None:
-    if STATIC_OPTIM_STOP_FLAG:
-        return None
-    # Physical arraylike without a unit
-    if isinstance(x, ArrayLike):
-        if is_traced(x):
-            return None
-        if isinstance(x, jax.Array):
-            if x.size >= MAX_STATIC_OPTIMIZED_SIZE:
-                return None
-            return np.asarray(x, copy=True)
-        assert isinstance(x, StaticArrayLike), "Internal error, please report"
-        return x
-    # Unitful
-    x_arr = None
-    if x.static_arr is not None:
-        x_arr = x.static_arr
-    elif not is_traced(x.val):
-        x_arr = x.val
-        if isinstance(x_arr, jax.Array):
-            if x_arr.size >= MAX_STATIC_OPTIMIZED_SIZE:
-                return None
-            x_arr = np.asarray(x_arr, copy=True)
-    assert x_arr is None or isinstance(x_arr, StaticArrayLike)
-    return x_arr
-
 
 def can_optimize_scale(obj: Unitful | ArrayLike) -> bool:
     v = obj.val if isinstance(obj, Unitful) else obj

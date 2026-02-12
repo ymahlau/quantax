@@ -1,4 +1,5 @@
 # ruff: noqa: F811
+from quantax.functional.utils import get_static_operand
 
 import jax
 import jax.numpy as jnp
@@ -7,7 +8,7 @@ from plum import dispatch, overload
 
 from quantax.core.typing import PhysicalArrayLike
 from quantax.core.utils import is_traced
-from quantax.unitful.unitful import Unitful, get_static_operand
+from quantax.unitful.unitful import Unitful
 
 
 ## norm #####################################
