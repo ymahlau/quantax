@@ -31,4 +31,9 @@ Quantax implements its own tracing mechanism with the following characteristics:
 - During tracing, all non-jax unitful arrays are executed eagerly. When operations involve tracers and non-traced Unitfuls, non-traced values are converted as constant input nodes for the computation graph
 - Unitfuls with jax Array as inputs have a fixed scale (which can be optimized because input values are known). Jax arrays with all zero-values have an unknown scale.
 - Non-unitful jax arrays are converted to Unitful jax array (without SI-unit attached) and hence traced
+- For small jax arrays, during compilation the traced operations are executed eagerly to better determine the optimal scale. After tracing, these operations are replayed with the jitted input.
+
+## Development Guide
+If you want to add a new function to this library, the following steps should be followed:
+- 
 

@@ -1,3 +1,4 @@
+from quantax.core.unit import Unit
 import math
 from typing import Any, Sequence
 
@@ -6,12 +7,11 @@ import jax.numpy as jnp
 import numpy as np
 from frozendict import frozendict
 from jax import core
-from jaxtyping import ArrayLike
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.fraction import Fraction
+from quantax.core.fraction import IntFraction
 from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
-from quantax.core.typing import SI, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
+from quantax.core.typing import SI, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike, AnyArrayLike
 
 
 def handle_n_scales(
@@ -155,9 +155,9 @@ def best_scale(
 
 
 def dim_after_multiplication(
-    dim1: dict[SI, int | Fraction] | frozendict[SI, int | Fraction],
-    dim2: dict[SI, int | Fraction] | frozendict[SI, int | Fraction],
-) -> frozendict[SI, int | Fraction]:
+    dim1: Unit,
+    dim2: Unit,
+) -> Unit:
     unit_dict = {k: v for k, v in dim1.items()}
     for k, v in dim2.items():
         if k in unit_dict:
@@ -166,7 +166,7 @@ def dim_after_multiplication(
                 del unit_dict[k]
         else:
             unit_dict[k] = v
-    return frozendict(unit_dict)
+    return Unit(unit_dict)
 
 
 def is_struct_optimizable(a: Any) -> bool:
@@ -205,7 +205,7 @@ def can_perform_static_ops(x: StaticArrayLike | None):
     return True
 
 
-def output_unitful_for_array(static_arr: ArrayLike | jax.ShapeDtypeStruct | None) -> bool:
+def output_unitful_for_array(static_arr: AnyArrayLike | jax.ShapeDtypeStruct | None) -> bool:
     if static_arr is None:
         return False
     if is_traced(static_arr):

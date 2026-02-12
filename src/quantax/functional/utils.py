@@ -1,3 +1,4 @@
+from typing import Union
 import jax
 import numpy as np
 
@@ -8,12 +9,26 @@ from quantax.core.utils import is_traced
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
+AnyUnitType = Union[
+    AnyArrayLike,
+    Unitful,
+    UnitfulTracer
+]
 
 def get_static_operand(
-    x: Unitful | AnyArrayLike,
-) -> StaticArrayLike | None:
+    x: UnitfulTracer | AnyArrayLike | Unitful,
+) -> Unitful | None:
     if STATIC_OPTIM_STOP_FLAG:
         return None
+    
+    if isinstance(x, Unitful):
+        if is_traced(x.val):
+            return None
+        if isinstance(x.val, jax.Array):
+            if x.val.size >= MAX_STATIC_OPTIMIZED_SIZE:
+                return None
+            return Unitful(val=np.asarray(x.val, copy=True))
+        return x
 
     # Physical arraylike without a unit
     if isinstance(x, AnyArrayLike):
@@ -22,13 +37,13 @@ def get_static_operand(
         if isinstance(x, jax.Array):
             if x.size >= MAX_STATIC_OPTIMIZED_SIZE:
                 return None
-            return np.asarray(x, copy=True)
+            return Unitful(val=np.asarray(x, copy=True))
         assert isinstance(x, StaticArrayLike), "Internal error, please report"
-        return x
+        return Unitful(val=x)
 
     # tracer
-    if isinstance(x, UnitfulTracer):
-        return x.static_arr
+    assert isinstance(x, UnitfulTracer), "Internal error, please report"
+    return x.static_unitful
 
     # Unitful
     x_arr = None

@@ -6,7 +6,7 @@ from quantax.unitful.unitful import (
     Unitful,
 )
 
-patch_all_functions_jax()
+# patch_all_functions_jax()
 
 
 __all__ = [

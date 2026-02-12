@@ -1,17 +1,14 @@
 from __future__ import annotations
+from quantax.core.unit import EMPTY_UNIT
 
-# from numbers import Number
 from typing import TYPE_CHECKING, Any, Self
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jaxtyping import ArrayLike
-from plum import add_conversion_method
 from pytreeclass import tree_repr
 
-# ruff: noqa: F811
-from quantax.core.fraction import Fraction
+from quantax.core.fraction import IntFraction
 from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import (
     PHYSICAL_DTYPES,
@@ -19,14 +16,15 @@ from quantax.core.typing import (
     PhysicalArrayLike,
     RealPhysicalArrayLike,
     StaticArrayLike,
-    StaticPhysicalArrayLike,
+    StaticPhysicalArrayLike, 
+    AnyArrayLike,
 )
 from quantax.core.utils import (
     best_scale,
     is_currently_compiling,
     is_traced,
 )
-from quantax.unitful.unit import Unit
+from quantax.core.unit import Unit
 
 if TYPE_CHECKING:
     from quantax.unitful.indexing import UnitfulIndexer
@@ -34,52 +32,36 @@ if TYPE_CHECKING:
 
 @autoinit
 class Unitful(TreeClass):
-    val: ArrayLike
-    unit: Unit = frozen_field()
+    val: AnyArrayLike
+    unit: Unit = frozen_field(default=EMPTY_UNIT)
+    scale: int = frozen_field(default=0)
     optimize_scale: bool = frozen_field(default=True)
 
     def _validate(self):
         bad_dtype = isinstance(self.val, jax.Array | np.ndarray | np.number) and self.dtype not in PHYSICAL_DTYPES
         if isinstance(self.val, NonPhysicalArrayLike) or bad_dtype:
-            if self.unit.scale != 0:
+            if self.scale != 0:
                 if isinstance(self.val, int):
                     raise Exception(f"Cannot have non-zero scale for integer {self}. Consider using float as input.")
                 else:
                     raise Exception(f"Cannot have non-zero scale for non-physical {self}")
-            if self.unit.dim != {}:
-                if isinstance(self.val, int):
-                    raise Exception(
-                        f"Cannot have non-empty dimension for integer {self}. Consider using float as input."
-                    )
-                else:
-                    raise Exception(f"Cannot have non-empty dimension for non-physical {self}")
+            if self.unit:
+                raise Exception(f"Cannot have non-empty dimension for non-physical {self}")
+                
 
     def __post_init__(self):
         self._validate()
         if not self.optimize_scale or not can_optimize_scale(self):
             return
-        orig_val = self.val
-        if is_traced(self.val):
-            # if value is traced then optimize with static array
-            assert self.static_arr is not None and isinstance(self.static_arr, StaticPhysicalArrayLike)
-            optimized_val, power = best_scale(self.static_arr, self.unit.scale)
-            assert isinstance(optimized_val, StaticPhysicalArrayLike)
-            self.static_arr = optimized_val
-            self.val = self.val * (10**power)
-        else:
+        if not is_traced(self.val):
             # non-traced case: optimize scale
             assert isinstance(self.val, PhysicalArrayLike)
-            optimized_val, power = best_scale(self.val, self.unit.scale)
+            optimized_val, power = best_scale(self.val, self.scale)
             self.val = optimized_val
-        new_scale = self.unit.scale - power
-        self.unit = Unit(scale=new_scale, dim=self.unit.dim)
-        # special case: The value might have been static jax array within jit context and scale optimization converted
-        # it to tracer. In this case, create a static array from the original array
-        # if not is_traced(orig_val) and is_traced(self.val):
-        #     self.static_arr = get_static_operand(orig_val) * (10**power)
+            self.scale = self.scale - power
 
-    def materialise(self) -> ArrayLike:
-        if self.unit.dim:
+    def materialise(self) -> AnyArrayLike:
+        if self.unit:
             raise ValueError(f"Cannot materialise unitful array with a non-zero unit: {self.unit}")
         return self.value()
 
@@ -93,10 +75,9 @@ class Unitful(TreeClass):
         assert isinstance(v, jax.Array), f"safe array_materialise called on Unitful with non-array value: {self}"
         return v
 
-    def value(self) -> ArrayLike:
-        scale = self.unit.scale
-        if isinstance(scale, Fraction):
-            scale = scale.value()
+    def value(self) -> AnyArrayLike:
+        if isinstance(self.scale, IntFraction):
+            scale = self.scale.value()
         if scale == 0:
             return self.val
         return self.val * (10**scale)
@@ -110,14 +91,6 @@ class Unitful(TreeClass):
         v = self.value()
         assert isinstance(v, float), f"safe float_value called on Unitful with non-float value: {self}"
         return v
-
-    def static_value(self) -> StaticArrayLike | None:
-        if self.static_arr is None:
-            return None
-        scale = self.unit.scale
-        if isinstance(scale, Fraction):
-            scale = scale.value()
-        return self.static_arr * (10**scale)
 
     @property
     def at(self) -> UnitfulIndexer:
@@ -323,12 +296,12 @@ class Unitful(TreeClass):
     def __reversed__(self):
         return iter(self[::-1])
 
-    def __neg__(self):
+    def __neg__(self) -> Unitful:
         if isinstance(self.val, NonPhysicalArrayLike):
             raise Exception(f"Cannot perform negation on non-physcal value {self}")
         return Unitful(val=-self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
 
-    def __pos__(self):
+    def __pos__(self) -> Unitful:
         """Unary plus: +x"""
         if isinstance(self.val, NonPhysicalArrayLike):
             raise Exception(f"Cannot perform unary plus on non-physcal value {self}")
@@ -388,33 +361,33 @@ class Unitful(TreeClass):
 # This conversion method is necessary, because within jit-context we lie to the dispatcher.
 # Specifically, functions that are supposed to return a jax array will return a unitful to be able to perform
 # scale optimization.
-def unitful_to_array_conversion(obj: Unitful):
-    assert obj.unit.dim == {}
-    if is_currently_compiling():
-        return obj
-    return obj.array_materialise()
+# def unitful_to_array_conversion(obj: Unitful):
+#     assert obj.unit == {}
+#     if is_currently_compiling():
+#         return obj
+#     return obj.array_materialise()
 
 
-add_conversion_method(type_from=Unitful, type_to=jax.Array, f=unitful_to_array_conversion)
+# add_conversion_method(type_from=Unitful, type_to=jax.Array, f=unitful_to_array_conversion)
 
 
-def unitful_to_array_conversion_with_bool(obj: Unitful) -> np.bool | np.ndarray | jax.Array | bool:
-    assert obj.unit.dim == {}
-    if is_currently_compiling():
-        result: np.bool | np.ndarray | jax.Array | bool = obj  # type: ignore
-    else:
-        result: np.bool | np.ndarray | jax.Array | bool = obj.materialise()  # type: ignore
-    return result
+# def unitful_to_array_conversion_with_bool(obj: Unitful) -> np.bool | np.ndarray | jax.Array | bool:
+#     assert obj.unit == {}
+#     if is_currently_compiling():
+#         result: np.bool | np.ndarray | jax.Array | bool = obj  # type: ignore
+#     else:
+#         result: np.bool | np.ndarray | jax.Array | bool = obj.materialise()  # type: ignore
+#     return result
 
 
-add_conversion_method(
-    type_from=Unitful,
-    type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
-    f=unitful_to_array_conversion_with_bool,
-)
+# add_conversion_method(
+#     type_from=Unitful,
+#     type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
+#     f=unitful_to_array_conversion_with_bool,
+# )
 
 
-def can_optimize_scale(obj: Unitful | ArrayLike) -> bool:
+def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
     v = obj.val if isinstance(obj, Unitful) else obj
     if isinstance(v, NonPhysicalArrayLike):
         return False
@@ -423,9 +396,5 @@ def can_optimize_scale(obj: Unitful | ArrayLike) -> bool:
     if is_traced(v) and not isinstance(obj, Unitful):
         return False
     if is_traced(v):
-        assert isinstance(obj, Unitful)
-        if obj.static_arr is None:
-            return False
-        if not can_optimize_scale(obj.static_arr):
-            return False
+        return False
     return True
