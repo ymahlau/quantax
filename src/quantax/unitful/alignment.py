@@ -1,6 +1,7 @@
+from quantax import Unit, Unitful
 from quantax.core.utils import handle_different_scales
 from quantax.unitful.unitful import can_optimize_scale
-from quantax import Unitful, Unit
+
 
 def align_scales(
     u1: Unitful,

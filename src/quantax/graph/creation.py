@@ -1,6 +1,8 @@
-from quantax.graph.data import GraphData
-from quantax.core.glob import TraceData
 import rustworkx
+
+from quantax.core.glob import TraceData
+from quantax.graph.data import GraphData
+
 
 def create_graph_from_trace(
     args,
@@ -20,7 +22,7 @@ def create_graph_from_trace(
     graph.add_nodes_from(trace_data.nodes)
     graph.add_edges_from(trace_data.node_in_edges)
     graph.add_edges_from(trace_data.node_out_edges)
-    
+
     return GraphData(
         graph=graph,
         args=args,
@@ -29,4 +31,3 @@ def create_graph_from_trace(
         trace_kwargs=trace_kwargs,
         trace_output=trace_output,
     )
-

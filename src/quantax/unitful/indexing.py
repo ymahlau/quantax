@@ -1,10 +1,10 @@
-from quantax.unitful.alignment import align_scales
 from dataclasses import dataclass
 from typing import Any
 
 import jax
 import numpy as np
 
+from quantax.unitful.alignment import align_scales
 from quantax.unitful.unitful import Unitful
 
 

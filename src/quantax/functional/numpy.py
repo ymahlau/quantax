@@ -1,6 +1,4 @@
 # ruff: noqa: F811
-from quantax.core.glob import register_node
-from quantax.functional.utils import get_static_operand
 import cmath
 import math
 from typing import Sequence
@@ -13,6 +11,7 @@ from plum import dispatch, overload
 
 from quantax.core.constants import ATOL_COMPARSION, MAX_STATIC_OPTIMIZED_SIZE, RTOL_COMPARSION
 from quantax.core.fraction import Fraction
+from quantax.core.glob import register_node
 from quantax.core.typing import PHYSICAL_DTYPES, SI, AnyArrayLike
 from quantax.core.utils import (
     can_perform_static_ops,
@@ -22,12 +21,13 @@ from quantax.core.utils import (
     is_traced,
     output_unitful_for_array,
 )
+from quantax.functional.utils import get_static_operand
+from quantax.unitful.tracer import OperatorNode, UnitfulTracer
 from quantax.unitful.unit import (
     EMPTY_UNIT,
     Unit,
 )
 from quantax.unitful.unitful import Unitful, can_optimize_scale
-from quantax.unitful.tracer import UnitfulTracer, OperatorNode
 
 
 ## Multiplication ###########################
@@ -45,7 +45,7 @@ def multiply(
         new_static_arr = x_arr * y_arr
     node = OperatorNode(
         op_name="multiply",
-        args={'x': x, 'y': y},
+        args={"x": x, "y": y},
     )
     result = UnitfulTracer(unit=Unit(scale=new_scale, dim=unit_dict), parent=node, static_arr=new_static_arr)
     node.output_tracer = (result,)
@@ -62,7 +62,6 @@ def multiply(
     new_val = x.val * y.val
     new_scale = x.unit.scale + y.unit.scale
     return Unitful(val=new_val, unit=Unit(scale=new_scale, dim=unit_dict))
-
 
 
 # @overload

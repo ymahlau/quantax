@@ -1,13 +1,15 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from quantax.unitful.tracer import UnitfulTracer, OperatorNode
+    from quantax.unitful.tracer import OperatorNode, UnitfulTracer
 
 STATIC_OPTIM_STOP_FLAG: bool = False
 
 IS_UNITFUL_TRACING: bool = False
+
 
 @dataclass(kw_only=True)
 class TraceData:
@@ -15,7 +17,9 @@ class TraceData:
     node_in_edges: list[tuple[int, int, Any]] = field(default_factory=list)
     node_out_edges: list[tuple[int, int, Any]] = field(default_factory=list)
 
+
 TRACE_DATA = TraceData()
+
 
 def register_node(node: OperatorNode) -> None:
     global TRACE_DATA

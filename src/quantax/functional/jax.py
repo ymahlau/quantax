@@ -1,20 +1,17 @@
-from quantax.graph.visualization import plot_graph_data
-from quantax.functional.utils import get_static_operand
-from quantax.graph.creation import create_graph_from_trace
-from quantax.core.glob import TraceData
-from quantax.unitful.unit import EMPTY_UNIT
-from quantax.unitful.tracer import UnitfulTracer
-from quantax.core.typing import AnyArrayLike, ShapedArrayLike
-from functools import partial
 from typing import Any, Callable
 
 import jax
 import matplotlib.pyplot as plt
 
 from quantax.core import glob
-from quantax.core.utils import hash_abstract_pytree
+from quantax.core.glob import TraceData
+from quantax.core.typing import AnyArrayLike, ShapedArrayLike
+from quantax.functional.utils import get_static_operand
+from quantax.graph.creation import create_graph_from_trace
+from quantax.graph.visualization import plot_graph_data
+from quantax.unitful.tracer import UnitfulTracer
+from quantax.unitful.unit import EMPTY_UNIT
 from quantax.unitful.unitful import Unitful
-
 
 # class UnitfulJitWrapped:
 #     def __init__(
@@ -95,14 +92,20 @@ from quantax.unitful.unitful import Unitful
 
 #         return self._call_from_cache(input_hash, *args, **kwargs)
 
+
 def convert_to_tracer(data):
     """
     Converts given pytree to tracers
     """
+
     def _conversion_helper(x: AnyArrayLike | Unitful) -> UnitfulTracer:
-        sd = None if not isinstance(x, ShapedArrayLike) else  jax.ShapeDtypeStruct(
-            shape=x.shape,
-            dtype=x.dtype,
+        sd = (
+            None
+            if not isinstance(x, ShapedArrayLike)
+            else jax.ShapeDtypeStruct(
+                shape=x.shape,
+                dtype=x.dtype,
+            )
         )
         static_arr = get_static_operand(x)
         return UnitfulTracer(
@@ -110,7 +113,7 @@ def convert_to_tracer(data):
             val_shape_dtype=sd,
             static_arr=static_arr,
         )
-        
+
     converted_data = jax.tree.map(
         lambda x: _conversion_helper(x) if isinstance(x, AnyArrayLike | Unitful) else x,
         data,
@@ -127,15 +130,14 @@ class UnitfulJitWrapped:
     ):
         self.fun = fun
         self.jit_kwargs = jit_kwargs
-        
-        
+
     def __call__(self, *args, **kwargs):
         glob.IS_UNITFUL_TRACING = True
         glob.TRACE_DATA = TraceData()
-        
+
         trace_args = convert_to_tracer(args)
         trace_kwargs = convert_to_tracer(kwargs)
-        
+
         trace_result = self.fun(*trace_args, **trace_kwargs)
         graph_data = create_graph_from_trace(
             args=args,

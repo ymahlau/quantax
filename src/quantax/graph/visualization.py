@@ -1,13 +1,15 @@
-from quantax.unitful.tracer import UnitfulTracer, OperatorNode
-from quantax.graph.data import GraphData
 from rustworkx.visualization import mpl_draw
+
+from quantax.graph.data import GraphData
+from quantax.unitful.tracer import OperatorNode, UnitfulTracer
+
 
 def get_label_from_node(node) -> str:
     if isinstance(node, UnitfulTracer):
         return node.id  # TODO: use variable name
     elif isinstance(node, OperatorNode):
         return node.op_name
-    raise Exception(f"This should never happen")
+    raise Exception("This should never happen")
 
 
 def plot_graph_data(
@@ -18,5 +20,3 @@ def plot_graph_data(
         labels=get_label_from_node,
         with_labels=True,
     )
-
-

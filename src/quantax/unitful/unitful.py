@@ -11,8 +11,6 @@ from plum import add_conversion_method
 from pytreeclass import tree_repr
 
 # ruff: noqa: F811
-from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.fraction import Fraction
 from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import (
@@ -25,7 +23,6 @@ from quantax.core.typing import (
 )
 from quantax.core.utils import (
     best_scale,
-    handle_different_scales,
     is_currently_compiling,
     is_traced,
 )
@@ -226,6 +223,7 @@ class Unitful(TreeClass):
 
     def __mul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
         from quantax.functional.numpy import multiply
+
         return multiply(self, other)
 
     def __rmul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
@@ -414,6 +412,7 @@ add_conversion_method(
     type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
     f=unitful_to_array_conversion_with_bool,
 )
+
 
 def can_optimize_scale(obj: Unitful | ArrayLike) -> bool:
     v = obj.val if isinstance(obj, Unitful) else obj
