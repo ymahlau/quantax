@@ -1,7 +1,12 @@
+from __future__ import annotations
+from quantax.core.fraction import IntFraction
 from quantax.unitful.tracer import UnitfulTracer, OperatorNode
-from quantax.functional.constraints import CONSTRAINTS_DICT
+from quantax.unitful.unitful import Unitful
+from quantax.functional.collection import CONSTRAINTS_DICT
 from quantax.core.glob import TraceData
 from ortools.math_opt.python import mathopt
+import jax.numpy as jnp
+import jax
 
 
 def solve_scale_assignment(
@@ -16,6 +21,11 @@ def solve_scale_assignment(
     model = mathopt.Model(name="Scale_Optimization")
     var_ops_dict, var_tracer_dict = collect_variables(model, trace_data)
     
+    add_input_constraints(
+        model=model,
+        trace_data=trace_data,
+        var_tracer_dict=var_tracer_dict,
+    )
     add_operator_constraints(
         model=model,
         trace_data=trace_data,
@@ -40,7 +50,6 @@ def solve_scale_assignment(
         result[k] = round(variable_assignment[v])
     return result
 
-
 def collect_variables(
     model: mathopt.Model,
     trace_data: TraceData,
@@ -64,7 +73,26 @@ def collect_variables(
                 var_ops_dict[key] = cur_var
                 
     return var_ops_dict, var_tracer_dict
-    
+
+
+def add_input_constraints(
+    model: mathopt.Model,
+    trace_data: TraceData,
+    var_tracer_dict: dict[int, mathopt.Variable],
+):
+    for t in trace_data.tracer_nodes:
+        if t.value is not None:
+            # add input constraint
+            assert isinstance(t.value, Unitful)
+            if jnp.all(t.value.val == 0):  # TODO: change this to unitful equal comparison once implemented
+                # if all input values are zero, we do not know the correct scale for this input value
+                continue
+            cur_scale = t.value.scale
+            if isinstance(cur_scale, IntFraction):
+                cur_scale = cur_scale.value()
+            cur_var = var_tracer_dict[t.id]
+            model.add_linear_constraint(cur_var == cur_scale)
+
 
 def add_operator_constraints(
     model: mathopt.Model,
@@ -74,7 +102,7 @@ def add_operator_constraints(
 ):
     for n in trace_data.operator_nodes:
         c_fun = CONSTRAINTS_DICT[n.op_name]
-        c_outs = [var_tracer_dict[t.id] for t in n.output_tracer]
+        c_outs = [var_tracer_dict[t.id] for t in jax.tree.leaves(n.output_tracer)]
         # TODO: handle non-traced inputs
         c_kwargs = {}
         for k, t in n.args.items():

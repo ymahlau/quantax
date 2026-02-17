@@ -1,4 +1,4 @@
-from quantax import functional, units
+# from quantax import functional, units
 from quantax.core.typing import SI
 from quantax.functional.patching import patch_all_functions_jax
 from quantax.unitful.unitful import (
@@ -13,6 +13,6 @@ __all__ = [
     "Unit",
     "Unitful",
     "SI",
-    "units",
-    "functional",
+    # "units",
+    # "functional",
 ]

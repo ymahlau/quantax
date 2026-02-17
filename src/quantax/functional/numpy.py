@@ -1,4 +1,4 @@
-# ruff: noqa: F811
+from __future__ import annotations
 import cmath
 import math
 from typing import Sequence, overload
@@ -135,7 +135,7 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
             args={"x": x, "y": y},
         )
         result = UnitfulTracer(unit=new_unit, parent=node, static_unitful=new_static_unitful)
-        node.output_tracer = (result,)
+        node.output_tracer = result
         register_node(node)
         return result
     

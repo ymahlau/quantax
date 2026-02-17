@@ -1,3 +1,4 @@
+from __future__ import annotations
 from quantax.core.unit import Unit
 import math
 from typing import Any, Sequence
@@ -190,11 +191,8 @@ def is_traced(x) -> bool:
     return isinstance(x, core.Tracer)
 
 
-def hash_abstract_pytree(tree) -> int:
-    avals = jax.tree.map(lambda x: jax.eval_shape(lambda: x) if isinstance(x, jax.Array) else x, tree)
-    flat_avals, treedef = jax.tree.flatten(avals)
-    flat_avals_tuple = tuple(flat_avals)
-    return hash((flat_avals_tuple, treedef))
+def is_shaped_arr(x: Any):
+    return hasattr(x, "shape") and hasattr(x, "dtype")
 
 
 def can_perform_static_ops(x: StaticArrayLike | None):

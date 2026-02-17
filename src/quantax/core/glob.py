@@ -1,4 +1,5 @@
 from __future__ import annotations
+import jax
 from functools import cached_property
 
 from dataclasses import dataclass, field
@@ -36,7 +37,8 @@ def register_node(node: OperatorNode) -> None:
     for t in node.args.values():
         TRACE_DATA.node_in_edges.append((t.id, node.id, None))
     # output edges
-    for t in node.output_tracer:
+    trace_leaves = jax.tree.leaves(node.output_tracer)
+    for t in trace_leaves:
         TRACE_DATA.node_out_edges.append((node.id, t.id, None))
 
 

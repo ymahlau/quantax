@@ -1,4 +1,5 @@
-from typing import Union
+from __future__ import annotations
+from typing import Union, TYPE_CHECKING, Any
 import jax
 import numpy as np
 
@@ -6,6 +7,7 @@ from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
 from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import is_traced
+
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
@@ -55,3 +57,28 @@ def get_static_operand(
             x_arr = np.asarray(x_arr, copy=True)
     assert x_arr is None or isinstance(x_arr, StaticArrayLike)
     return x_arr
+
+
+def hash_abstract_unitful_pytree(
+    data: Any,
+) -> int:
+    leaves, tree_def = jax.tree.flatten(
+        tree=data,
+        is_leaf=lambda x: isinstance(x, Unitful),
+    )
+    to_hash = []
+    for l in leaves:
+        if isinstance(l, Unitful):
+            to_hash.append((l.scale, hash_abstract_arraylike(l.val)))
+        elif isinstance(l, AnyArrayLike):
+            to_hash.append(hash_abstract_arraylike(l))
+        else:
+            raise Exception(f"Invalid hash input: {l}")
+
+def hash_abstract_arraylike(v: AnyArrayLike):
+    if is_shaped_arr(v):
+        return hash((v.shape, str(v.dtype)))
+    # non-shaped arrays are python scalars, which get same hash every time
+    return 0
+        
+

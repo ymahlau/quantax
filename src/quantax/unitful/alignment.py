@@ -1,3 +1,4 @@
+from __future__ import annotations
 from quantax import Unit, Unitful
 from quantax.core.utils import handle_different_scales
 from quantax.unitful.unitful import can_optimize_scale

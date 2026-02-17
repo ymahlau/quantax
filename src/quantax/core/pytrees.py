@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import Any, Callable, Literal, Self, Sequence, TypeVar, overload
 

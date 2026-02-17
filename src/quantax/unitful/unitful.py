@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 class Unitful(TreeClass):
     val: AnyArrayLike
     unit: Unit = frozen_field(default=EMPTY_UNIT)
-    scale: int = frozen_field(default=0)
+    scale: int | IntFraction = frozen_field(default=0)
     optimize_scale: bool = frozen_field(default=True)
 
     def _validate(self):
@@ -59,6 +59,15 @@ class Unitful(TreeClass):
             optimized_val, power = best_scale(self.val, self.scale)
             self.val = optimized_val
             self.scale = self.scale - power
+    
+    def add_scale_offset(self, offset: int | IntFraction) -> Self:
+        factor = 10 ** (offset)
+        return Unitful(
+            val=self.val * factor,
+            unit=self.unit,
+            scale=self.scale + offset,
+            optimize_scale=False,
+        )
 
     def materialise(self) -> AnyArrayLike:
         if self.unit:
