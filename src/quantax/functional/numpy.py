@@ -1,42 +1,29 @@
 from __future__ import annotations
-import cmath
-import math
-from typing import Sequence, overload
+
+from typing import Any, overload
 
 import jax
-import jax.numpy as jnp
 import numpy as np
-
-from quantax.core.constants import ATOL_COMPARSION, MAX_STATIC_OPTIMIZED_SIZE, RTOL_COMPARSION
-from quantax.core.fraction import IntFraction
-from quantax.core.glob import register_node
-from quantax.core.typing import PHYSICAL_DTYPES, SI, AnyArrayLike
-from quantax.core.utils import (
-    can_perform_static_ops,
-    dim_after_multiplication,
-    handle_n_scales,
-    is_struct_optimizable,
-    is_traced,
-    output_unitful_for_array,
-)
-from quantax.functional.utils import get_static_operand, AnyUnitType
-from quantax.unitful.tracer import OperatorNode, UnitfulTracer
-from quantax.core.unit import (
-    EMPTY_UNIT,
-    Unit,
-)
-from quantax.unitful.unitful import Unitful, can_optimize_scale
 from ortools.math_opt.python import mathopt
+
+from quantax.core.glob import register_node
+from quantax.core.typing import AnyArrayLike, StaticArrayLike
+from quantax.core.utils import (
+    dim_after_multiplication,
+)
+from quantax.functional.utils import AnyUnitType
+from quantax.unitful.tracer import OperatorNode, UnitfulTracer
+from quantax.unitful.unitful import Unitful
 
 
 ## Multiplication ###########################
 def constraints_multiply(
     x: mathopt.Variable,
     y: mathopt.Variable,
-    out: Sequence[mathopt.Variable],
+    out: Any,
 ) -> list[mathopt.BoundedLinearExpression]:
-    assert len(out) == 1
-    return [x + y == out[0]]
+    assert isinstance(out, (mathopt.Variable, mathopt.LinearSum))
+    return [x + y == out]
 
 
 @overload
@@ -111,10 +98,11 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     # Unitful handling
     def _mul_unitful(x: Unitful, y: Unitful):
         new_unit = dim_after_multiplication(x.unit, y.unit)
+        assert new_unit is not None
         new_val = x.val * y.val
         new_scale = x.scale + y.scale
         return Unitful(val=new_val, unit=new_unit, scale=new_scale)
-    
+
     if isinstance(x, Unitful) and isinstance(y, Unitful):
         return _mul_unitful(x, y)
     elif isinstance(x, Unitful) and not isinstance(y, (Unitful | UnitfulTracer)):
@@ -123,7 +111,7 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     elif not isinstance(x, (Unitful | UnitfulTracer)) and isinstance(y, Unitful):
         x_unitful = Unitful(val=x)
         return _mul_unitful(x_unitful, y)
-    
+
     # Tracer handling
     def _mul_tracer(x: UnitfulTracer, y: UnitfulTracer):
         new_unit = dim_after_multiplication(x.unit, y.unit)
@@ -138,16 +126,20 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         node.output_tracer = result
         register_node(node)
         return result
-    
+
     if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
         return _mul_tracer(x, y)
-    # elif isinstance(x, UnitfulTracer) and not isinstance(y, UnitfulTracer):
-    #     y_unitful = y if isinstance(y, Unitful) else Unitful(val=y)
-    #     return _mul_tracer(x, y_unitful)
-    # elif not isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-    #     x_unitful = Unitful(val=x)
-    #     return _mul_tracer(x_unitful, y)
-    
+    if isinstance(x, UnitfulTracer):
+        assert isinstance(y, StaticArrayLike | Unitful)
+        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
+        y_tracer = UnitfulTracer(unit=None, static_unitful=y_unitful)
+        return _mul_tracer(x, y_tracer)
+    if isinstance(y, UnitfulTracer):
+        assert isinstance(x, StaticArrayLike | Unitful)
+        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
+        x_tracer = UnitfulTracer(unit=None, static_unitful=x_unitful)
+        return _mul_tracer(x_tracer, y)
+
     # any other array-like
     assert isinstance(x, AnyArrayLike)
     assert isinstance(y, AnyArrayLike)

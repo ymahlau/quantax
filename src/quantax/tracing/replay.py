@@ -1,11 +1,12 @@
 from __future__ import annotations
-from quantax.core.typing import AnyArrayLike
+
 import jax
+
+from quantax.core.glob import TraceData
+from quantax.core.typing import AnyArrayLike
 from quantax.functional.collection import FUNCTION_DICT
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
-from typing import Callable
-from quantax.core.glob import TraceData
 
 
 def replay_execution(
@@ -13,12 +14,12 @@ def replay_execution(
     jax_kwargs,
     trace_result,
     trace_data: TraceData,
-    scale_assignment: dict[int | tuple[str, int, int], int],
+    scale_assignment: dict[tuple[int, bool] | tuple[str, int, int], int],
 ):
     value_dict: dict[int, Unitful | AnyArrayLike] = {
         t.id: t.value for t in trace_data.tracer_nodes if t.value is not None
     }
-    
+
     for n in trace_data.operator_nodes:
         # get operator input
         input_kwargs = {}
@@ -35,16 +36,13 @@ def replay_execution(
                 input_kwargs[k] = converted_unitful
             else:
                 input_kwargs[k] = v
-        
+
         # call function
         cur_fn = FUNCTION_DICT[n.op_name]
         cur_result = cur_fn(**input_kwargs)
-        
+
         # map outputs to corresponding tracers
-        val_leaves, treedef = jax.tree.flatten(
-            tree=cur_result, 
-            is_leaf=lambda x: isinstance(x, Unitful)
-        )
+        val_leaves, treedef = jax.tree.flatten(tree=cur_result, is_leaf=lambda x: isinstance(x, Unitful))
         trace_leaves, treedef2 = jax.tree.flatten(
             tree=n.output_tracer,
             is_leaf=lambda x: isinstance(x, Unitful | UnitfulTracer),
@@ -52,7 +50,7 @@ def replay_execution(
         assert treedef == treedef2, "internal error, please report"
         for l, t in zip(val_leaves, trace_leaves):
             value_dict[t.id] = l
-            
+
     # reconstruct the function results from all computed values
     result = jax.tree.map(
         f=lambda t: value_dict[t.id],
@@ -60,4 +58,3 @@ def replay_execution(
         is_leaf=lambda x: isinstance(x, UnitfulTracer),
     )
     return result
-

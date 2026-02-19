@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import Union, TYPE_CHECKING, Any
+
+from typing import Any, Union
+
 import jax
 import numpy as np
 
@@ -7,29 +9,25 @@ from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
 from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import is_traced
-
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
-AnyUnitType = Union[
-    AnyArrayLike,
-    Unitful,
-    UnitfulTracer
-]
+AnyUnitType = Union[AnyArrayLike, Unitful, UnitfulTracer]
+
 
 def get_static_operand(
     x: UnitfulTracer | AnyArrayLike | Unitful,
 ) -> Unitful | None:
     if STATIC_OPTIM_STOP_FLAG:
         return None
-    
+
     if isinstance(x, Unitful):
         if is_traced(x.val):
             return None
         if isinstance(x.val, jax.Array):
             if x.val.size >= MAX_STATIC_OPTIMIZED_SIZE:
                 return None
-            return Unitful(val=np.asarray(x.val, copy=True))
+            return Unitful(val=np.asarray(x.val, copy=True), scale=x.scale, unit=x.unit)
         return x
 
     # Physical arraylike without a unit
@@ -47,16 +45,16 @@ def get_static_operand(
     assert isinstance(x, UnitfulTracer), "Internal error, please report"
     return x.static_unitful
 
-    # Unitful
-    x_arr = None
-    if not is_traced(x.val):
-        x_arr = x.val
-        if isinstance(x_arr, jax.Array):
-            if x_arr.size >= MAX_STATIC_OPTIMIZED_SIZE:
-                return None
-            x_arr = np.asarray(x_arr, copy=True)
-    assert x_arr is None or isinstance(x_arr, StaticArrayLike)
-    return x_arr
+    # # Unitful
+    # x_arr = None
+    # if not is_traced(x.val):
+    #     x_arr = x.val
+    #     if isinstance(x_arr, jax.Array):
+    #         if x_arr.size >= MAX_STATIC_OPTIMIZED_SIZE:
+    #             return None
+    #         x_arr = np.asarray(x_arr, copy=True)
+    # assert x_arr is None or isinstance(x_arr, StaticArrayLike)
+    # return x_arr
 
 
 def hash_abstract_unitful_pytree(
@@ -74,11 +72,33 @@ def hash_abstract_unitful_pytree(
             to_hash.append(hash_abstract_arraylike(l))
         else:
             raise Exception(f"Invalid hash input: {l}")
+    return hash(tuple(to_hash))
+
 
 def hash_abstract_arraylike(v: AnyArrayLike):
-    if is_shaped_arr(v):
+    if hasattr(v, "shape") and hasattr(v, "dtype"):
         return hash((v.shape, str(v.dtype)))
     # non-shaped arrays are python scalars, which get same hash every time
     return 0
-        
 
+
+def check_jax_unitful_tracer_type(
+    data: Any,
+) -> tuple[bool, bool, bool]:
+    # TODO: make more efficient by parallelising, avoiding python for loop
+    leaves = jax.tree.leaves(
+        tree=data,
+        is_leaf=lambda x: isinstance(x, (Unitful, UnitfulTracer)),
+    )
+    has_jax, has_tracer, has_unitful = False, False, False
+    for l in leaves:
+        if isinstance(l, jax.Array):
+            has_jax = True
+        if isinstance(l, Unitful):
+            has_unitful = True
+            if isinstance(l.val, jax.Array):
+                has_jax = True
+        if isinstance(l, UnitfulTracer):
+            has_unitful = True
+            has_tracer = True
+    return has_jax, has_unitful, has_tracer

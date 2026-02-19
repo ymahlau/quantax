@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import jax
 from fastcore.foundation import copy_func
 
-from quantax.functional.jax import jit
+from quantax.functional.jit import jit
+
 # from quantax.functional.linalg import (
 #     norm,
 # )

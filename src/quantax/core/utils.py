@@ -1,18 +1,19 @@
 from __future__ import annotations
-from quantax.core.unit import Unit
+
+import inspect
 import math
-from typing import Any, Sequence
+import types
+from typing import Any, Callable, Sequence
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from frozendict import frozendict
 from jax import core
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.fraction import IntFraction
 from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
-from quantax.core.typing import SI, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike, AnyArrayLike
+from quantax.core.typing import AnyArrayLike, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
+from quantax.core.unit import Unit
 
 
 def handle_n_scales(
@@ -156,9 +157,18 @@ def best_scale(
 
 
 def dim_after_multiplication(
-    dim1: Unit,
-    dim2: Unit,
-) -> Unit:
+    dim1: Unit | None,
+    dim2: Unit | None,
+) -> Unit | None:
+    # simple checks
+    if dim1 is None and dim2 is None:
+        return None
+    if dim1 is None:
+        return dim2
+    if dim2 is None:
+        return dim1
+
+    # both are actually units
     unit_dict = {k: v for k, v in dim1.items()}
     for k, v in dim2.items():
         if k in unit_dict:
@@ -191,10 +201,6 @@ def is_traced(x) -> bool:
     return isinstance(x, core.Tracer)
 
 
-def is_shaped_arr(x: Any):
-    return hasattr(x, "shape") and hasattr(x, "dtype")
-
-
 def can_perform_static_ops(x: StaticArrayLike | None):
     if x is None:
         return False
@@ -212,3 +218,11 @@ def output_unitful_for_array(static_arr: AnyArrayLike | jax.ShapeDtypeStruct | N
         if static_arr.size > MAX_STATIC_OPTIMIZED_SIZE:
             return False
     return is_currently_compiling() and not STATIC_OPTIM_STOP_FLAG
+
+
+def get_all_closure_vars(fn: Callable):
+    closure_vars = inspect.getclosurevars(fn)
+    non_module_globals = {
+        name: value for name, value in closure_vars.globals.items() if not isinstance(value, types.ModuleType)
+    }
+    return closure_vars.nonlocals, non_module_globals
