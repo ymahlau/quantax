@@ -7,21 +7,19 @@ import jax.numpy as jnp
 from ortools.math_opt.python import mathopt
 
 from quantax.core.fraction import IntFraction
-from quantax.core.glob import TraceData
+from quantax.core.glob import GlobalTraceData, ScaleAssignment
 from quantax.functional.collection import CONSTRAINTS_DICT
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
+_ROUND_EPS = 1e-12
 
 def solve_scale_assignment(
-    args,
-    kwargs,
     trace_args,
     trace_kwargs,
     trace_output,
-    trace_data: TraceData,
-) -> dict[tuple[int, bool] | tuple[str, int, int], int]:
-    # TODO: handle zero inputs
+    trace_data: GlobalTraceData,
+) -> ScaleAssignment:
     model = mathopt.Model(name="Scale_Optimization")
     var_ops_dict, var_tracer_dict = collect_variables(model, trace_data)
 
@@ -48,25 +46,41 @@ def solve_scale_assignment(
     assert primal_solution is not None
     variable_assignment = primal_solution.variable_values
 
-    result: dict[tuple[int, bool] | tuple[str, int, int], int] = {}
+    # output transformation
+    tracer_scales, tracer_pre_transforms = {}, {}
+    for t_id, (v1, v2) in var_tracer_dict.items():
+        cur_v1 = variable_assignment[v1]
+        cur_v2 = variable_assignment[v2]
+        round_v2 = round(cur_v2)
+        assert abs(round_v2 - cur_v2) < _ROUND_EPS
+        tracer_scales[t_id] = cur_v1
+        tracer_pre_transforms[t_id] = cur_v2
+
+    node_input_transforms = {}
     for k, v in var_ops_dict.items():
-        result[k] = round(variable_assignment[v])
-    for k, (v1, v2) in var_tracer_dict.items():
-        result[k, True] = round(variable_assignment[v1])
-        result[k, False] = round(variable_assignment[v2])
-    return result
+        cur_v = variable_assignment[v]
+        round_v = round(cur_v)
+        assert abs(round_v - cur_v) < _ROUND_EPS
+        node_input_transforms[k] = cur_v
+
+    assignment = ScaleAssignment(
+        tracer_scales=tracer_scales,
+        tracer_pre_transforms=tracer_pre_transforms,
+        node_input_transforms=node_input_transforms,
+    )
+    return assignment
 
 
 def collect_variables(
     model: mathopt.Model,
-    trace_data: TraceData,
+    trace_data: GlobalTraceData,
 ) -> tuple[
     dict[tuple[str, int, int], mathopt.Variable],
     dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ]:
     # collect tracer nodes
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]] = {}
-    for t in trace_data.tracer_nodes:
+    for t in trace_data.tracer_nodes.values():
         # variable representing scale of array
         cur_var = model.add_integer_variable(name=f"x{t.id}")
         # variable representing scale shift for variable
@@ -75,23 +89,22 @@ def collect_variables(
 
     # collect op nodes
     var_ops_dict = {}
-    for n in trace_data.operator_nodes:
-        for k, a in n.args.items():
-            if isinstance(a, UnitfulTracer):
-                # variable for input scale shift due to constraints of operations
-                key = (k, a.id, n.id)
-                cur_var = model.add_integer_variable(name=f"x.{k}.{a.id}.{n.id}")
-                var_ops_dict[key] = cur_var
+    for n in trace_data.operator_nodes.values():
+        for k, a in n.op_kwargs.items():
+            # variable for input scale shift due to constraints of operations
+            key = (k, a.id, n.id)
+            cur_var = model.add_integer_variable(name=f"{k}.{a.id}.{n.id}")
+            var_ops_dict[key] = cur_var
 
     return var_ops_dict, var_tracer_dict
 
 
 def add_input_constraints(
     model: mathopt.Model,
-    trace_data: TraceData,
+    trace_data: GlobalTraceData,
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
-    for t in trace_data.tracer_nodes:
+    for t in trace_data.tracer_nodes.values():
         if t.static_unitful is not None:
             cur_unitful = t.static_unitful
         elif t.value is not None and isinstance(t.value, Unitful):
@@ -112,22 +125,22 @@ def add_input_constraints(
 
 def add_operator_constraints(
     model: mathopt.Model,
-    trace_data: TraceData,
+    trace_data: GlobalTraceData,
     var_ops_dict: dict[tuple[str, int, int], mathopt.Variable],
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
-    for n in trace_data.operator_nodes:
+    for n in trace_data.operator_nodes.values():
         # TODO: handle non-traced inputs
         # Operator input variables
         c_kwargs = {}
-        for k, t in n.args.items():
+        for k, t in n.op_kwargs.items():
             # for each operation, the input is the variable plus optional scale adjustment factor
             factor_var = var_ops_dict[(k, t.id, n.id)]
             input_var, _ = var_tracer_dict[t.id]
             c_kwargs[k] = input_var + factor_var
 
         # generate tree of output variables
-        leaves, treedef = jax.tree.flatten(n.output_tracer, is_leaf=lambda x: isinstance(x, UnitfulTracer))
+        leaves, treedef = jax.tree.flatten(n.output, is_leaf=lambda x: isinstance(x, UnitfulTracer))
         c_out_list = [(var_tracer_dict[t.id][0] + var_tracer_dict[t.id][1]) for t in leaves]
         c_out_tree = jax.tree.unflatten(treedef, c_out_list)
 

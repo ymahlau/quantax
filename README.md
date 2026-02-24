@@ -34,6 +34,15 @@ Quantax implements its own tracing mechanism with the following characteristics:
 - For small jax arrays, during compilation the traced operations are executed eagerly to better determine the optimal scale. After tracing, these operations are replayed with the jitted input.
 - For complex functions, like jit/cond/while/etc. that involve function transformations, a tree of these nodes is build when they are used in a nested way. During function replay, first the innermost functions are resolved and the propagated to the outer functions.
 
+### Tracing internal notes
+- During tracing, a global graph of basic operations is constructed. This graph is transformed to MILP and scale assignment is solved
+- Function transformations make things complicated:
+    - We have a special graph node for every function transformation (e.g. jit, cond, grad, ...). 
+    - This is NOT traced in the global graph, but the node has local trace data keeping track of the immediate things happening in this functions. If the function contains another function transform, the other transform keeps track of their immediate operations and so on.
+    - To keep local and global trace data in sync, a special no-op equality operation is used on the input/output of special graph node. This allows cylces in the graph (e.g. through while loop) and still having a correct MILP
+    - To replay a transformed function, every special graph node implements a replay function. This is called recursively on nested function transformations. The replay of the recorded ops is done using a topological ordering on the graph, starting from the input tracers.
+
+
 ## Development Guide
 If you want to add a new function to this library, the following steps should be followed:
 - 

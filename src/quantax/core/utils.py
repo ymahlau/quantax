@@ -11,7 +11,6 @@ import numpy as np
 from jax import core
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.typing import AnyArrayLike, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 
@@ -217,7 +216,7 @@ def output_unitful_for_array(static_arr: AnyArrayLike | jax.ShapeDtypeStruct | N
     if isinstance(static_arr, jax.Array | np.ndarray | jax.ShapeDtypeStruct):
         if static_arr.size > MAX_STATIC_OPTIMIZED_SIZE:
             return False
-    return is_currently_compiling() and not STATIC_OPTIM_STOP_FLAG
+    return is_currently_compiling()
 
 
 def get_all_closure_vars(fn: Callable):

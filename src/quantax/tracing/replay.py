@@ -23,7 +23,7 @@ def replay_execution(
     for n in trace_data.operator_nodes:
         # get operator input
         input_kwargs = {}
-        for k, v in n.args.items():
+        for k, v in n.op_kwargs.items():
             if isinstance(v, UnitfulTracer):
                 # use fixed scale computed beforehand as assignment
                 base_scale = scale_assignment[v.id]
@@ -44,7 +44,7 @@ def replay_execution(
         # map outputs to corresponding tracers
         val_leaves, treedef = jax.tree.flatten(tree=cur_result, is_leaf=lambda x: isinstance(x, Unitful))
         trace_leaves, treedef2 = jax.tree.flatten(
-            tree=n.output_tracer,
+            tree=n.output,
             is_leaf=lambda x: isinstance(x, Unitful | UnitfulTracer),
         )
         assert treedef == treedef2, "internal error, please report"

@@ -6,13 +6,13 @@ import jax
 import numpy as np
 from ortools.math_opt.python import mathopt
 
-from quantax.core.glob import register_node
+from quantax.core.glob import OperatorNode, register_node_full
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import (
     dim_after_multiplication,
 )
 from quantax.functional.utils import AnyUnitType
-from quantax.unitful.tracer import OperatorNode, UnitfulTracer
+from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 
@@ -118,13 +118,13 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
             new_static_unitful = x.static_unitful * y.static_unitful
+        result = UnitfulTracer(unit=new_unit, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="multiply",
-            args={"x": x, "y": y},
+            op_kwargs={"x": x, "y": y},
+            output=result,
         )
-        result = UnitfulTracer(unit=new_unit, parent=node, static_unitful=new_static_unitful)
-        node.output_tracer = result
-        register_node(node)
+        register_node_full(node)
         return result
 
     if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):

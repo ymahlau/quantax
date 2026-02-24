@@ -262,6 +262,31 @@ class TreeClass(tc.TreeClass):
 
         assert cur_attr.__class__ == self.__class__
         return cur_attr
+    
+    def updated_copy(self, **kwargs: Any) -> Self:
+        """Returns an updated copy of the tree with modified top-level attributes.
+        
+        Retrieves all initialization attributes of the current instance, updates 
+        them with the provided kwargs, and returns a new instance.
+
+        Args:
+            **kwargs: Dictionary mapping immediate attribute names to their new values.
+
+        Returns:
+            Self: A newly instantiated object with the updated attributes.
+        """
+        init_args = {}
+        
+        # 1. Gather all current attributes that belong in __init__
+        for f in self.get_class_fields():
+            if f.init:
+                init_args[f.name] = getattr(self, f.name)
+                
+        # 2. Update with the new values provided in kwargs
+        init_args.update(kwargs)
+        
+        # 3. Instantiate and return the new class
+        return self.__class__(**init_args)
 
 
 T = TypeVar("T")

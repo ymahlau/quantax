@@ -1,12 +1,13 @@
 from __future__ import annotations
+from quantax.functional.artificial import noop
+from quantax.core.glob import FunctionTransformNode, register_tracer_for_current_context, update_data_fn_start, update_data_fn_end
 
-from typing import Any, Union
+from typing import Any, Union, Callable
 
 import jax
 import numpy as np
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.glob import STATIC_OPTIM_STOP_FLAG
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import is_traced
 from quantax.unitful.tracer import UnitfulTracer
@@ -18,8 +19,6 @@ AnyUnitType = Union[AnyArrayLike, Unitful, UnitfulTracer]
 def get_static_operand(
     x: UnitfulTracer | AnyArrayLike | Unitful,
 ) -> Unitful | None:
-    if STATIC_OPTIM_STOP_FLAG:
-        return None
 
     if isinstance(x, Unitful):
         if is_traced(x.val):
@@ -102,3 +101,41 @@ def check_jax_unitful_tracer_type(
             has_unitful = True
             has_tracer = True
     return has_jax, has_unitful, has_tracer
+
+
+def parse_arg_kwargs(
+    args, 
+    kwargs
+) -> dict[str, UnitfulTracer]:
+    op_kwargs = {}
+    arg_leaves, arg_treedef = jax.tree.flatten(args, is_leaf=lambda x: isinstance(x, UnitfulTracer))
+    for idx, l in enumerate(arg_leaves):
+        assert isinstance(l, UnitfulTracer)
+        op_kwargs[f"a_{idx}"] = l
+    kwarg_leaves, kwarg_treedef = jax.tree.flatten(kwargs, is_leaf=lambda x: isinstance(x, UnitfulTracer))
+    for idx, l in enumerate(kwarg_leaves):
+        assert isinstance(l, UnitfulTracer)
+        op_kwargs[f"k_{idx}"] = l
+    return op_kwargs
+
+
+def trace_fn(
+    fn: Callable,
+    fn_transform_node: FunctionTransformNode,
+    fn_args,
+    fn_kwargs,
+    input_tracer_list: list[UnitfulTracer]
+):
+    prev_data = update_data_fn_start()
+    register_tracer_for_current_context(input_tracer_list)
+    trace_result = fn(*fn_args, **fn_kwargs)
+    result_copy = jax.tree.map(
+        lambda x: noop(x), 
+        trace_result,
+        is_leaf=lambda x: isinstance(x, (Unitful, UnitfulTracer))
+    )
+
+    cur_data = update_data_fn_end(prev_data, result=result_copy)
+    fn_transform_node.fn_tracers.append(cur_data)
+
+    return result_copy
