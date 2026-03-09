@@ -7,8 +7,8 @@ import numpy as np
 from ortools.math_opt.python import mathopt
 
 from quantax.core.glob import OperatorNode, register_node_full
-from quantax.functional.types import AnyUnitType
 from quantax.unitful.tracer import UnitfulTracer
+from quantax.unitful.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
 
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 from typing import Mapping
+
 from frozendict import frozendict
 
 from quantax.core.fraction import IntFraction
-from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import SI
 
 
@@ -19,7 +20,7 @@ class Unit(frozendict[SI, int | IntFraction]):
             if not isinstance(v, (IntFraction, int)):
                 raise TypeError(f"Value {v} must be Fraction or int")
         
-        return super().__new__(cls, mapping)  # ty:ignore[no-matching-overload]
+        return super().__new__(cls, mapping)
     
     def __str__(self) -> str:
         if not self.items():

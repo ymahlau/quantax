@@ -22,12 +22,13 @@ from quantax.core.glob import (
 )
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike
 from quantax.core.utils import get_all_closure_vars
-from quantax.functional.utils import check_jax_unitful_tracer_type, get_static_operand, parse_arg_kwargs, trace_fn
+from quantax.functional.utils import parse_arg_kwargs, trace_fn
 from quantax.tracing.graph import GraphData, create_graph_from_trace
 from quantax.tracing.optimization import solve_scale_assignment
 from quantax.tracing.replay import get_replay_function
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
+from quantax.unitful.utils import check_jax_unitful_tracer_type, get_static_operand
 
 
 @dataclass(kw_only=True)
@@ -197,45 +198,6 @@ class UnitfulJitWrapped:
 
         return result
 
-        # return final result
-
-        # # glob.CURRENT_NODE = tree_node
-
-        # # if we are already tracing, continue tracing on lower level
-        # if has_tracer:
-        #     result = self.fun(*args, **kwargs)
-        #     glob.CURRENT_NODE = tree_node.parent  # go back to previous meta node
-        #     if glob.CURRENT_NODE is not None:
-        #         glob.CURRENT_NODE.children.append(tree_node)
-        #     node.output_tracer = result
-        #     return result
-
-        # # if we are not yet tracing, initialize the tracing mechanism and continue with final solve+replay afterwards
-        # # assert glob.TRACE_DATA is None
-        # # glob.TRACE_DATA = TraceData(special_tree=tree_node)
-        # trace_args = convert_to_tracer(args)
-        # trace_kwargs = convert_to_tracer(kwargs)
-
-        # # call the function
-        # trace_result = self.fun(*trace_args, **trace_kwargs)
-
-        # # replay jax functions for jitting
-        # a = 1
-
-        # partial_exec_fn = partial(
-        #     replay_execution,
-        #     trace_result=trace_result,
-        #     scale_assignment=scale_assignment,
-        #     trace_data=glob.TRACE_DATA,
-        # )
-        # jitted_replay_fn = jax.jit(partial_exec_fn, **self.jit_kwargs)
-        # result = jitted_replay_fn(args, kwargs)
-
-        # del glob.TRACE_DATA
-        # glob.TRACE_DATA = None
-
-        # return result
-
 
 def get_jit_original() -> Callable:
     if hasattr(jax, "_orig_jit"):
@@ -246,16 +208,3 @@ def get_jit_original() -> Callable:
 def jit(fun: Callable, **kwargs) -> UnitfulJitWrapped:
     custom_wrapper = UnitfulJitWrapped(fun=fun, jit_kwargs=kwargs)
     return custom_wrapper
-
-    # conv_args = convert_to_jax(args)
-    # conv_kwargs = convert_to_jax(kwargs)
-    # function_hash = hash((
-    #     hash_abstract_unitful_pytree(args),
-    #     hash_abstract_unitful_pytree(kwargs),
-    # ))
-    # if we already compiled before, just call cached function
-    # if function_hash in self.function_cache:
-    #     cached_fn = self.function_cache[function_hash]
-    #     result = cached_fn(conv_args, conv_kwargs)
-    #     return result
-    # self.function_cache[function_hash] = jitted_replay_fn

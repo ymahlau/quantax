@@ -11,8 +11,8 @@ from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import (
     dim_after_multiplication,
 )
-from quantax.functional.types import AnyUnitType
 from quantax.unitful.tracer import UnitfulTracer
+from quantax.unitful.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
 
 

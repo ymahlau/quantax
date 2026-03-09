@@ -6,12 +6,10 @@ import types
 from typing import Any, Callable, Sequence
 
 import jax
-import jax.numpy as jnp
 import numpy as np
-from jax import core
 
-from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.typing import AnyArrayLike, NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
+from quantax.core.jax import is_traced
+from quantax.core.typing import NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 
 
@@ -189,34 +187,12 @@ def is_struct_optimizable(a: Any) -> bool:
     return False
 
 
-def is_currently_compiling() -> bool:
-    return isinstance(
-        jnp._orig_array(1) + 1,  # ty:ignore[unresolved-attribute]
-        core.Tracer,
-    )
-
-
-def is_traced(x) -> bool:
-    return isinstance(x, core.Tracer)
-
-
 def can_perform_static_ops(x: StaticArrayLike | None):
     if x is None:
         return False
     if isinstance(x, NonPhysicalArrayLike):
         return False
     return True
-
-
-def output_unitful_for_array(static_arr: AnyArrayLike | jax.ShapeDtypeStruct | None) -> bool:
-    if static_arr is None:
-        return False
-    if is_traced(static_arr):
-        return False
-    if isinstance(static_arr, jax.Array | np.ndarray | jax.ShapeDtypeStruct):
-        if static_arr.size > MAX_STATIC_OPTIMIZED_SIZE:
-            return False
-    return is_currently_compiling()
 
 
 def get_all_closure_vars(fn: Callable):
