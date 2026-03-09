@@ -1,23 +1,27 @@
 from __future__ import annotations
-from abc import abstractmethod
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import jax
+from rustworkx import PyDiGraph
+
+from quantax.core.typing import AnyArrayLike
 
 if TYPE_CHECKING:
     from quantax.unitful.tracer import UnitfulTracer
+    from quantax.unitful.unitful import Unitful
 
 CURRENT_NODE: FunctionTransformNode | None = None
 CURRENT_TRACE_DATA: TraceData | None = None
-GLOBAL_DATA: GlobalTraceData | None = None
-GLOBAL_SCALE_ASSIGNMENT: ScaleAssignment | None = None
+GLOBAL_TRACE_DATA: GlobalTraceData | None = None
+GLOBAL_REPLAY_DATA: GlobalReplayData | None = None
 
 
 @dataclass(kw_only=True)
 class GlobalTraceData:
-    operator_nodes: dict[int, OperatorNode] = field(default_factory=dict)
+    pure_operator_nodes: dict[int, OperatorNode] = field(default_factory=dict)
     tracer_nodes: dict[int, UnitfulTracer] = field(default_factory=dict)
     node_in_edges: list[tuple[int, int]] = field(default_factory=list)
     node_out_edges: list[tuple[int, int]] = field(default_factory=list)
@@ -25,10 +29,14 @@ class GlobalTraceData:
 
     @property
     def nodes(self) -> list[OperatorNode | UnitfulTracer]:
-        return list(self.operator_nodes.values()) + list(self.tracer_nodes.values())
+        return self.operator_nodes + list(self.tracer_nodes.values())
+
+    @property
+    def operator_nodes(self) -> list[OperatorNode]:
+        return list(self.pure_operator_nodes.values()) + list(self.fn_transform_nodes.values())
 
     def __len__(self) -> int:
-        return len(self.operator_nodes) + len(self.tracer_nodes) + len(self.fn_transform_nodes)
+        return len(self.pure_operator_nodes) + len(self.tracer_nodes) + len(self.fn_transform_nodes)
 
 
 @dataclass(kw_only=True)
@@ -62,11 +70,13 @@ class OperatorNode:
     def __post_init__(self):
         # sanity checks
         from quantax.unitful.tracer import UnitfulTracer
+
         for t in jax.tree.leaves(self.output, is_leaf=lambda x: isinstance(x, UnitfulTracer)):
             assert isinstance(t, UnitfulTracer)
 
     def __eq__(self, other):
-        if not isinstance(other, OperatorNode): return False
+        if not isinstance(other, OperatorNode):
+            return False
         return self.id == other.id
 
 
@@ -74,18 +84,24 @@ class OperatorNode:
 class FunctionTransformNode(OperatorNode):
     fn_tracers: list[TraceData] = field(default_factory=list)
     parent: FunctionTransformNode | None
+    trace_args: Any = field(default=None)
+    trace_kwargs: dict[str, Any] = field(default_factory=dict)
 
     @abstractmethod
-    def replay_node(self):
+    def replay_node(
+        self,
+        *args,
+        **kwargs,
+    ):
         pass
 
 
 @dataclass(kw_only=True)
 class ScaleAssignment:
     # scale exponents for every tracer
-    tracer_scales: dict[int, int | float]
-    
-    # mapping from 
+    tracer_scales: dict[int, int]
+
+    # mapping from
     # - operation argument (e.g. 'x' is first argument to multiply)
     # - tracer id
     # - operation node id
@@ -97,17 +113,33 @@ class ScaleAssignment:
     tracer_pre_transforms: dict[int, int]
 
 
+@dataclass(kw_only=True)
+class GraphData:
+    graph: PyDiGraph
+    graph_idx_to_node_id: dict[int, int]
+    node_id_to_graph_idx: dict[int, int]
+    trace_data: TraceData
+    ordering: list[int]
+
+
+@dataclass(kw_only=True)
+class GlobalReplayData:
+    graph_data_dict: dict[int, list[GraphData]]
+    scale_assignment: ScaleAssignment
+    value_dict: dict[int, Unitful | AnyArrayLike] = field(default_factory=dict)
+
+
 def init_global_trace_data():
-    global GLOBAL_DATA
-    assert GLOBAL_DATA is None, "Trace end not called properly"
-    GLOBAL_DATA = GlobalTraceData()
+    global GLOBAL_TRACE_DATA
+    assert GLOBAL_TRACE_DATA is None, "Trace end not called properly"
+    GLOBAL_TRACE_DATA = GlobalTraceData()
 
 
 def end_global_trace_data() -> GlobalTraceData:
-    global GLOBAL_DATA
-    assert GLOBAL_DATA is not None, "Trace start not called properly"
-    cur_data = GLOBAL_DATA
-    GLOBAL_DATA = None
+    global GLOBAL_TRACE_DATA
+    assert GLOBAL_TRACE_DATA is not None, "Trace start not called properly"
+    cur_data = GLOBAL_TRACE_DATA
+    GLOBAL_TRACE_DATA = None
     return cur_data
 
 
@@ -139,6 +171,7 @@ def update_data_node_start(new_node: FunctionTransformNode):
 
     return prev_node
 
+
 def update_data_node_end(prev_node: FunctionTransformNode):
     global CURRENT_NODE
     cur_node = CURRENT_NODE
@@ -146,16 +179,20 @@ def update_data_node_end(prev_node: FunctionTransformNode):
     return cur_node
 
 
-def update_data_replay_start(scale_assignment: ScaleAssignment):
-    global GLOBAL_SCALE_ASSIGNMENT
-    assert GLOBAL_SCALE_ASSIGNMENT is None, "scale assignment end was not called properly before starting new replay"
-    GLOBAL_SCALE_ASSIGNMENT = scale_assignment
+def update_data_replay_start(
+    global_replay_data: GlobalReplayData,
+):
+    global GLOBAL_REPLAY_DATA
+
+    assert GLOBAL_REPLAY_DATA is None, "scale assignment end was not called properly before starting new replay"
+    GLOBAL_REPLAY_DATA = global_replay_data
+    assert GLOBAL_REPLAY_DATA is not None
 
 
 def update_data_replay_end():
-    global GLOBAL_SCALE_ASSIGNMENT
-    assert GLOBAL_SCALE_ASSIGNMENT is not None, "scale assignment start was not called before end"
-    GLOBAL_SCALE_ASSIGNMENT = None
+    global GLOBAL_REPLAY_DATA
+    assert GLOBAL_REPLAY_DATA is not None, "scale assignment start was not called before end"
+    GLOBAL_REPLAY_DATA = None
 
 
 def register_node_full(node: OperatorNode):
@@ -163,53 +200,54 @@ def register_node_full(node: OperatorNode):
     register_node_input(node)
     register_node_output(node)
 
+
 def register_node_input_output(node: OperatorNode):
     register_node_input(node)
     register_node_output(node)
 
 
 def register_node_pointer(node: OperatorNode) -> None:
-    global GLOBAL_DATA, CURRENT_TRACE_DATA
-    assert GLOBAL_DATA is not None
+    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
+    assert GLOBAL_TRACE_DATA is not None
     assert CURRENT_TRACE_DATA is not None
     assert node.id == -1, f"node has already been registered: {node}"
-    node.id = len(GLOBAL_DATA)
+    node.id = len(GLOBAL_TRACE_DATA)
     if not isinstance(node, FunctionTransformNode):
-        GLOBAL_DATA.operator_nodes[node.id] = node
+        GLOBAL_TRACE_DATA.pure_operator_nodes[node.id] = node
     else:
-        GLOBAL_DATA.fn_transform_nodes[node.id] = node
+        GLOBAL_TRACE_DATA.fn_transform_nodes[node.id] = node
     CURRENT_TRACE_DATA.operator_nodes[node.id] = node
 
 
 def register_node_input(node: OperatorNode):
-    global GLOBAL_DATA, CURRENT_TRACE_DATA
+    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
     assert CURRENT_TRACE_DATA is not None
     for t in node.op_kwargs.values():
         CURRENT_TRACE_DATA.node_in_edges.append((t.id, node.id))
         # global graph does not consider function transform a node, only trace basic operations
         if not isinstance(node, FunctionTransformNode):
-            assert GLOBAL_DATA is not None
-            GLOBAL_DATA.node_in_edges.append((t.id, node.id))
+            assert GLOBAL_TRACE_DATA is not None
+            GLOBAL_TRACE_DATA.node_in_edges.append((t.id, node.id))
 
 
 def register_node_output(node: OperatorNode):
-    global  GLOBAL_DATA, CURRENT_TRACE_DATA
+    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
     assert CURRENT_TRACE_DATA is not None
-    assert GLOBAL_DATA is not None
+    assert GLOBAL_TRACE_DATA is not None
     trace_leaves = jax.tree.leaves(node.output)
     for t in trace_leaves:
         CURRENT_TRACE_DATA.node_out_edges.append((node.id, t.id))
         # global graph does not consider function transform a node, only trace basic operations
         if not isinstance(node, FunctionTransformNode):
-            GLOBAL_DATA.node_out_edges.append((node.id, t.id))
+            GLOBAL_TRACE_DATA.node_out_edges.append((node.id, t.id))
 
 
 def register_tracer(t: UnitfulTracer):
-    global GLOBAL_DATA, CURRENT_TRACE_DATA
-    assert GLOBAL_DATA is not None
-    t_idx = len(GLOBAL_DATA)
+    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
+    assert GLOBAL_TRACE_DATA is not None
+    t_idx = len(GLOBAL_TRACE_DATA)
     t.id = t_idx
-    GLOBAL_DATA.tracer_nodes[t.id] = t
+    GLOBAL_TRACE_DATA.tracer_nodes[t.id] = t
     if CURRENT_TRACE_DATA is not None:
         CURRENT_TRACE_DATA.tracer_nodes[t.id] = t
 

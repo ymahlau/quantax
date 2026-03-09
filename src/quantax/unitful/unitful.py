@@ -1,5 +1,4 @@
 from __future__ import annotations
-from quantax.core.unit import EMPTY_UNIT
 
 from typing import TYPE_CHECKING, Any, Self
 
@@ -8,23 +7,20 @@ import jax.numpy as jnp
 import numpy as np
 from pytreeclass import tree_repr
 
-from quantax.core.fraction import IntFraction
+from quantax.core import glob
 from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import (
     PHYSICAL_DTYPES,
+    AnyArrayLike,
     NonPhysicalArrayLike,
     PhysicalArrayLike,
     RealPhysicalArrayLike,
-    StaticArrayLike,
-    StaticPhysicalArrayLike, 
-    AnyArrayLike,
 )
+from quantax.core.unit import EMPTY_UNIT, Unit
 from quantax.core.utils import (
     best_scale,
-    is_currently_compiling,
     is_traced,
 )
-from quantax.core.unit import Unit
 
 if TYPE_CHECKING:
     from quantax.unitful.indexing import UnitfulIndexer
@@ -34,7 +30,7 @@ if TYPE_CHECKING:
 class Unitful(TreeClass):
     val: AnyArrayLike
     unit: Unit = frozen_field(default=EMPTY_UNIT)
-    scale: int | IntFraction = frozen_field(default=0)
+    scale: int = frozen_field(default=0)
     optimize_scale: bool = frozen_field(default=True)
 
     def _validate(self):
@@ -47,7 +43,6 @@ class Unitful(TreeClass):
                     raise Exception(f"Cannot have non-zero scale for non-physical {self}")
             if self.unit:
                 raise Exception(f"Cannot have non-empty dimension for non-physical {self}")
-                
 
     def __post_init__(self):
         self._validate()
@@ -59,15 +54,21 @@ class Unitful(TreeClass):
             optimized_val, power = best_scale(self.val, self.scale)
             self.val = optimized_val
             self.scale = self.scale - power
-    
-    def add_scale_offset(self, offset: int | IntFraction) -> Self:
-        factor = 10 ** (offset)
+
+    def add_scale_offset(self, offset: int) -> Unitful:
+        factor = 10 ** (-offset)
         return Unitful(
             val=self.val * factor,
             unit=self.unit,
             scale=self.scale + offset,
             optimize_scale=False,
         )
+
+    def set_fixed_scale(self, new_scale: int) -> Unitful:
+        if new_scale == self.scale:
+            return self
+        offset = new_scale - self.scale
+        return self.add_scale_offset(offset)
 
     def materialise(self) -> AnyArrayLike:
         if self.unit:
@@ -85,11 +86,9 @@ class Unitful(TreeClass):
         return v
 
     def value(self) -> AnyArrayLike:
-        if isinstance(self.scale, IntFraction):
-            scale = self.scale.value()
-        if scale == 0:
+        if self.scale == 0:
             return self.val
-        return self.val * (10**scale)
+        return self.val * (10**self.scale)
 
     def array_value(self) -> jax.Array:
         v = self.value()
@@ -397,6 +396,9 @@ class Unitful(TreeClass):
 
 
 def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
+    # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
+    if glob.GLOBAL_REPLAY_DATA is not None:
+        return False
     v = obj.val if isinstance(obj, Unitful) else obj
     if isinstance(v, NonPhysicalArrayLike):
         return False

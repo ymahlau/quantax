@@ -4,22 +4,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax
+import numpy as np
 
 from quantax.core.glob import register_tracer
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 from quantax.unitful.unitful import Unitful
-import numpy as np
-
 
 
 @dataclass(kw_only=True)
 class UnitfulTracer:
+    # if None, the value was not a unitful before and needs to be converted back after replay
     unit: Unit | None = field()
     val_shape_dtype: jax.ShapeDtypeStruct | None = None
     id: int = field(default=-1, init=False)
     static_unitful: Unitful | None = None  # used during tracing to compute optimal scales
-    value: Unitful | AnyArrayLike | None = field(default=None)  # value is only used during replay, not before
+
+    # actual value, if tracer holds constant value (e.g. closure value from outer scope)
+    value: Unitful | AnyArrayLike | None = field(default=None)
 
     def __post_init__(self):
         register_tracer(self)

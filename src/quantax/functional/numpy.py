@@ -11,18 +11,27 @@ from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.utils import (
     dim_after_multiplication,
 )
-from quantax.functional.utils import AnyUnitType
+from quantax.functional.types import AnyUnitType
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 
 ## Multiplication ###########################
 def constraints_multiply(
-    x: mathopt.Variable,
-    y: mathopt.Variable,
-    out: Any,
+    x: mathopt.Variable | None,
+    y: mathopt.Variable | None,
+    out: Any | None,
 ) -> list[mathopt.BoundedLinearExpression]:
-    assert isinstance(out, (mathopt.Variable, mathopt.LinearSum))
+    if out is None:
+        assert x is None and y is None
+        return []
+    assert isinstance(out, mathopt.LinearSum)
+    if x is None:
+        assert y is not None
+        return [y == out]
+    if y is None:
+        assert x is not None
+        return [x == out]
     return [x + y == out]
 
 
@@ -132,18 +141,22 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     if isinstance(x, UnitfulTracer):
         assert isinstance(y, StaticArrayLike | Unitful)
         y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        y_tracer = UnitfulTracer(unit=None, static_unitful=y_unitful)
+        tracer_unit = None if not isinstance(y, Unitful) else y.unit
+        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
         return _mul_tracer(x, y_tracer)
     if isinstance(y, UnitfulTracer):
         assert isinstance(x, StaticArrayLike | Unitful)
         x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        x_tracer = UnitfulTracer(unit=None, static_unitful=x_unitful)
+        tracer_unit = None if not isinstance(x, Unitful) else x.unit
+        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
         return _mul_tracer(x_tracer, y)
 
     # any other array-like
     assert isinstance(x, AnyArrayLike)
     assert isinstance(y, AnyArrayLike)
-    return x * y
+    result = x * y
+    assert isinstance(result, AnyArrayLike)
+    return result
 
 
 # ## Division ###########################

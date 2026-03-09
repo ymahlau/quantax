@@ -1,20 +1,31 @@
 from __future__ import annotations
-from quantax.tracing.graph import create_graph_from_trace
-from dataclasses import dataclass
 
-from functools import partial
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
 
 from quantax.core import glob
-from quantax.core.glob import TraceData, FunctionTransformNode, init_global_trace_data, update_data_node_start, update_data_node_end, end_global_trace_data, update_data_replay_start, update_data_replay_end, update_data_fn_start, update_data_fn_end, register_node_pointer, register_node_input_output, register_tracer_for_current_context
+from quantax.core.glob import (
+    FunctionTransformNode,
+    GlobalReplayData,
+    end_global_trace_data,
+    init_global_trace_data,
+    register_node_input_output,
+    register_node_pointer,
+    register_tracer_for_current_context,
+    update_data_node_end,
+    update_data_node_start,
+    update_data_replay_end,
+    update_data_replay_start,
+)
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike
 from quantax.core.utils import get_all_closure_vars
 from quantax.functional.utils import check_jax_unitful_tracer_type, get_static_operand, parse_arg_kwargs, trace_fn
+from quantax.tracing.graph import GraphData, create_graph_from_trace
 from quantax.tracing.optimization import solve_scale_assignment
-from quantax.tracing.replay import replay_execution
+from quantax.tracing.replay import get_replay_function
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
@@ -22,10 +33,26 @@ from quantax.unitful.unitful import Unitful
 @dataclass(kw_only=True)
 class JitTransformNode(FunctionTransformNode):
     is_outermost: bool
+    jit_kwargs: dict[str, Any]
 
-    def replay_node(self, *args, **kwargs):
+    def replay_node(
+        self,
+        *args,
+        **kwargs,
+    ):
+        assert glob.GLOBAL_REPLAY_DATA is not None
+        cur_graph_data = glob.GLOBAL_REPLAY_DATA.graph_data_dict[self.id][0]
+        replay_fn = get_replay_function(
+            graph_data=cur_graph_data,
+            trace_args=self.trace_args,
+            trace_kwargs=self.trace_kwargs,
+            trace_result=self.output,
+        )
 
-        pass
+        orig_jit = get_jit_original()
+        result = orig_jit(replay_fn, **self.jit_kwargs)(*args, *kwargs)
+
+        return result
 
 
 def convert_to_tracer(data):
@@ -51,11 +78,11 @@ def convert_to_tracer(data):
     # race conditions may occur
     leaves, treedef = jax.tree.flatten(tree=data, is_leaf=lambda x: isinstance(x, Unitful))
     converted_leaves = []
-    for l in leaves:
-        if isinstance(l, AnyArrayLike | Unitful):
-            converted_leaves.append(_conversion_helper(l))
+    for leaf in leaves:
+        if isinstance(leaf, AnyArrayLike | Unitful):
+            converted_leaves.append(_conversion_helper(leaf))
         else:
-            converted_leaves.append(l)
+            converted_leaves.append(leaf)
     converted_data = jax.tree.unflatten(treedef, converted_leaves)
 
     return converted_data
@@ -77,7 +104,6 @@ class UnitfulJitWrapped:
     ):
         self.fun = fun
         self.jit_kwargs = jit_kwargs
-        # self.function_cache: dict[int, Callable] = {}
 
     def __call__(self, *args, **kwargs):
         args = convert_to_jax(args)
@@ -95,6 +121,7 @@ class UnitfulJitWrapped:
             parent=glob.CURRENT_NODE,
             op_kwargs={},
             is_outermost=(not has_tracer),
+            jit_kwargs=self.jit_kwargs,
         )
 
         if not has_tracer:
@@ -106,14 +133,16 @@ class UnitfulJitWrapped:
             register_node_pointer(node)
             fn_args = args
             fn_kwargs = kwargs
-        
+
         # update op kwarg entry of node (not possible before due to dependencies)
         op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
         node.op_kwargs = op_kwargs
+        node.trace_args = fn_args
+        node.trace_kwargs = fn_kwargs
 
         # start node operation
         prev_node = update_data_node_start(node)
-        result = trace_fn(
+        trace_result = trace_fn(
             fn=self.fun,
             fn_transform_node=node,
             fn_args=fn_args,
@@ -123,15 +152,15 @@ class UnitfulJitWrapped:
 
         # signal node end
         cur_node = update_data_node_end(prev_node)
-        result_leaves = jax.tree.leaves(result, is_leaf=lambda x: isinstance(x, UnitfulTracer))
+        result_leaves = jax.tree.leaves(trace_result, is_leaf=lambda x: isinstance(x, UnitfulTracer))
         assert cur_node == node
-        node.output = result
+        node.output = trace_result
 
         # if this was not the outermost jit, go back to tracing rest
         if has_tracer:
             register_tracer_for_current_context(result_leaves)
             register_node_input_output(node)
-            return result
+            return trace_result
 
         # if this was outermost jit, we are done tracing
         global_data = end_global_trace_data()
@@ -141,24 +170,34 @@ class UnitfulJitWrapped:
         scale_assignment = solve_scale_assignment(
             trace_args=fn_args,
             trace_kwargs=fn_kwargs,
-            trace_output=result,
+            trace_output=trace_result,
             trace_data=global_data,
         )
 
-        # replay the function
-        update_data_replay_start(scale_assignment)
-
         # compute topological ordering for every node
+        data_dict: dict[int, list[GraphData]] = {}
         for n in global_data.fn_transform_nodes.values():
+            cur_list = []
             for td in n.fn_tracers:
-                graph, graph_idx_to_node_id, node_id_to_graph_idx = create_graph_from_trace(td)
-                a = 1
+                graph_data = create_graph_from_trace(td)
+                cur_list.append(graph_data)
+            data_dict[n.id] = cur_list
 
+        # replay the function
+        global_replay_data = GlobalReplayData(
+            graph_data_dict=data_dict,
+            scale_assignment=scale_assignment,
+        )
+        update_data_replay_start(global_replay_data)
+        result = node.replay_node(
+            *args,
+            **kwargs,
+        )
         update_data_replay_end()
 
+        return result
+
         # return final result
-
-
 
         # # glob.CURRENT_NODE = tree_node
 
@@ -179,8 +218,6 @@ class UnitfulJitWrapped:
 
         # # call the function
         # trace_result = self.fun(*trace_args, **trace_kwargs)
-
-        
 
         # # replay jax functions for jitting
         # a = 1

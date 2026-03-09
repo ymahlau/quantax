@@ -6,13 +6,13 @@ import jax
 import jax.numpy as jnp
 from ortools.math_opt.python import mathopt
 
-from quantax.core.fraction import IntFraction
 from quantax.core.glob import GlobalTraceData, ScaleAssignment
 from quantax.functional.collection import CONSTRAINTS_DICT
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 _ROUND_EPS = 1e-12
+
 
 def solve_scale_assignment(
     trace_args,
@@ -51,17 +51,19 @@ def solve_scale_assignment(
     for t_id, (v1, v2) in var_tracer_dict.items():
         cur_v1 = variable_assignment[v1]
         cur_v2 = variable_assignment[v2]
+        round_v1 = round(cur_v1)
         round_v2 = round(cur_v2)
+        assert abs(round_v1 - cur_v1) < _ROUND_EPS
         assert abs(round_v2 - cur_v2) < _ROUND_EPS
-        tracer_scales[t_id] = cur_v1
-        tracer_pre_transforms[t_id] = cur_v2
+        tracer_scales[t_id] = round_v1
+        tracer_pre_transforms[t_id] = round_v2
 
     node_input_transforms = {}
     for k, v in var_ops_dict.items():
         cur_v = variable_assignment[v]
         round_v = round(cur_v)
         assert abs(round_v - cur_v) < _ROUND_EPS
-        node_input_transforms[k] = cur_v
+        node_input_transforms[k] = round_v
 
     assignment = ScaleAssignment(
         tracer_scales=tracer_scales,
@@ -81,6 +83,9 @@ def collect_variables(
     # collect tracer nodes
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]] = {}
     for t in trace_data.tracer_nodes.values():
+        if t.unit is None:
+            # this tracer represents non-unitful value
+            continue
         # variable representing scale of array
         cur_var = model.add_integer_variable(name=f"x{t.id}")
         # variable representing scale shift for variable
@@ -89,8 +94,15 @@ def collect_variables(
 
     # collect op nodes
     var_ops_dict = {}
-    for n in trace_data.operator_nodes.values():
+    for n in trace_data.operator_nodes:
+        # outermost jit does not contribute to constraints
+        if n.id == -1:
+            continue
+
         for k, a in n.op_kwargs.items():
+            if a.unit is None:
+                # non-unitful has no scale
+                continue
             # variable for input scale shift due to constraints of operations
             key = (k, a.id, n.id)
             cur_var = model.add_integer_variable(name=f"{k}.{a.id}.{n.id}")
@@ -105,6 +117,10 @@ def add_input_constraints(
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
     for t in trace_data.tracer_nodes.values():
+        if t.unit is None:
+            # non-unitful do not have a scale
+            continue
+
         if t.static_unitful is not None:
             cur_unitful = t.static_unitful
         elif t.value is not None and isinstance(t.value, Unitful):
@@ -117,8 +133,6 @@ def add_input_constraints(
             continue
 
         cur_scale = cur_unitful.scale
-        if isinstance(cur_scale, IntFraction):
-            cur_scale = cur_scale.value()
         cur_var, _ = var_tracer_dict[t.id]
         model.add_linear_constraint(cur_var == cur_scale)
 
@@ -129,19 +143,30 @@ def add_operator_constraints(
     var_ops_dict: dict[tuple[str, int, int], mathopt.Variable],
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
-    for n in trace_data.operator_nodes.values():
+    for n in trace_data.pure_operator_nodes.values():
         # TODO: handle non-traced inputs
         # Operator input variables
         c_kwargs = {}
         for k, t in n.op_kwargs.items():
-            # for each operation, the input is the variable plus optional scale adjustment factor
-            factor_var = var_ops_dict[(k, t.id, n.id)]
-            input_var, _ = var_tracer_dict[t.id]
-            c_kwargs[k] = input_var + factor_var
+            if t.unit is None:
+                # non-unitful does not have variable for input
+                c_kwargs[k] = None
+            else:
+                # for each operation, the input is the variable plus optional scale adjustment factor
+                factor_var = var_ops_dict[(k, t.id, n.id)]
+                input_var, _ = var_tracer_dict[t.id]
+                c_kwargs[k] = input_var + factor_var
 
         # generate tree of output variables
         leaves, treedef = jax.tree.flatten(n.output, is_leaf=lambda x: isinstance(x, UnitfulTracer))
-        c_out_list = [(var_tracer_dict[t.id][0] + var_tracer_dict[t.id][1]) for t in leaves]
+        c_out_list = []
+        for t in leaves:
+            if t.unit is None:
+                c_out_list.append(None)
+            else:
+                cur_fixed_scale = var_tracer_dict[t.id][0]
+                cur_offset = var_tracer_dict[t.id][1]
+                c_out_list.append(cur_fixed_scale - cur_offset)
         c_out_tree = jax.tree.unflatten(treedef, c_out_list)
 
         # prepare kwargs for node constraint function calling

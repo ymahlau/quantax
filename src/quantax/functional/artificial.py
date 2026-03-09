@@ -7,11 +7,7 @@ import numpy as np
 from ortools.math_opt.python import mathopt
 
 from quantax.core.glob import OperatorNode, register_node_full
-from quantax.core.typing import AnyArrayLike, StaticArrayLike
-from quantax.core.utils import (
-    dim_after_multiplication,
-)
-from quantax.functional.utils import AnyUnitType
+from quantax.functional.types import AnyUnitType
 from quantax.unitful.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
@@ -56,7 +52,7 @@ def noop(x: AnyUnitType) -> AnyUnitType:
     # non-tracer
     if not isinstance(x, UnitfulTracer):
         return x
-    
+
     # tracer
     x_cpy = UnitfulTracer(
         unit=x.unit,
@@ -71,7 +67,3 @@ def noop(x: AnyUnitType) -> AnyUnitType:
     )
     register_node_full(node)
     return x_cpy
-
-
-
-
