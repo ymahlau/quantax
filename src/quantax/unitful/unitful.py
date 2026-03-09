@@ -203,12 +203,12 @@ class Unitful(TreeClass):
         return str(self)
 
     def __mul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
-        from quantax.functional.numpy import multiply
+        from quantax.functional.numpy.basic import multiply
 
         return multiply(self, other)
 
     def __rmul__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
-        from quantax.functional.numpy import multiply
+        from quantax.functional.numpy.basic import multiply
 
         return multiply(other, self)
 
@@ -364,35 +364,6 @@ class Unitful(TreeClass):
         from quantax.functional.numpy import argmin
 
         return argmin(self, **kwargs)
-
-
-# This conversion method is necessary, because within jit-context we lie to the dispatcher.
-# Specifically, functions that are supposed to return a jax array will return a unitful to be able to perform
-# scale optimization.
-# def unitful_to_array_conversion(obj: Unitful):
-#     assert obj.unit == {}
-#     if is_currently_compiling():
-#         return obj
-#     return obj.array_materialise()
-
-
-# add_conversion_method(type_from=Unitful, type_to=jax.Array, f=unitful_to_array_conversion)
-
-
-# def unitful_to_array_conversion_with_bool(obj: Unitful) -> np.bool | np.ndarray | jax.Array | bool:
-#     assert obj.unit == {}
-#     if is_currently_compiling():
-#         result: np.bool | np.ndarray | jax.Array | bool = obj  # type: ignore
-#     else:
-#         result: np.bool | np.ndarray | jax.Array | bool = obj.materialise()  # type: ignore
-#     return result
-
-
-# add_conversion_method(
-#     type_from=Unitful,
-#     type_to=np.bool | np.ndarray | jax.Array | bool,  # type: ignore
-#     f=unitful_to_array_conversion_with_bool,
-# )
 
 
 def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:

@@ -4,34 +4,15 @@
 # import jax
 # import jax.numpy as jnp
 # import numpy as np
-# import plum
 # import pytest
 
 # from quantax.core import glob
 # from quantax.core.fraction import IntFraction
 # from quantax.core.pytrees import TreeClass, autoinit
 # from quantax.core.typing import SI
-# from quantax.core.utils import is_currently_compiling
-# from quantax.functional import (
-#     add,
-#     eq,
-#     ge,
-#     gt,
-#     le,
-#     lt,
-#     matmul,
-#     multiply,
-#     ne,
-#     pow,
-#     reshape,
-#     squeeze,
-#     subtract,
-# )
 # from quantax.functional.patching import patch_all_functions_jax
-# from quantax.unitful.unit import Unit
 # from quantax.unitful.unitful import Unitful
 
-# patch_all_functions_jax()
 
 
 # def test_multiply_unitful_unitful_same_dimensions():

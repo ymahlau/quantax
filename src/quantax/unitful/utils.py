@@ -3,11 +3,11 @@ from typing import Any
 import jax
 import numpy as np
 
-from quantax import Unitful
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
 from quantax.core.jax import is_traced
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.unitful.tracer import UnitfulTracer
+from quantax.unitful.unitful import Unitful
 
 
 def hash_abstract_unitful_pytree(

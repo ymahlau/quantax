@@ -8,12 +8,8 @@
 
 # from quantax.core.fraction import IntFraction
 # from quantax.core.typing import SI
-# from quantax.functional.numpy import roll, sqrt, transpose, where
-# from quantax.functional.patching import patch_all_functions_jax
-# from quantax.unitful.unit import EMPTY_UNIT, Unit
 # from quantax.unitful.unitful import Unitful
 
-# patch_all_functions_jax()
 
 
 # def test_sqrt_unitful_even_integer_dimensions():
