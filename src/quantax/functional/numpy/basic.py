@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, overload
+from typing import Any, overload, get_args
 
 import jax
 import numpy as np
@@ -158,8 +158,8 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         return _mul_tracer(x_tracer, y)
 
     # any other array-like
-    assert isinstance(x, AnyArrayLike), f"Invalid input type for multiply: {x}"
-    assert isinstance(y, AnyArrayLike), f"Invalid input type for multiply: {y}"
+    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for multiply: {x}"
+    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for multiply: {y}"
     result = x * y
-    assert isinstance(result, AnyArrayLike)
+    assert isinstance(result, get_args(AnyArrayLike))
     return result

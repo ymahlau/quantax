@@ -23,7 +23,7 @@ class UnitfulIndexer:
         """Get the leaf values at the specified location."""
         if self.where is None:
             return self.unitful
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         new_val = self.unitful.val[self.where]  # type: ignore
         return Unitful(val=new_val, unit=self.unitful.unit)
@@ -32,7 +32,7 @@ class UnitfulIndexer:
         """Set the leaf values at the specified location."""
         if self.where is None:
             raise Exception("Cannot update value if no where clause is given")
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         if self.unitful.unit.dim != value.unit.dim:
             raise Exception(
@@ -40,7 +40,7 @@ class UnitfulIndexer:
             )
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
-        assert isinstance(align_self_arr, jax.Array | np.ndarray)
+        assert isinstance(align_self_arr, (jax.Array, np.ndarray))
         if isinstance(align_self_arr, np.ndarray):
             new_val = np.copy(align_self_arr)
             new_val[self.where] = align_other.val
@@ -52,7 +52,7 @@ class UnitfulIndexer:
         """Set the leaf values at the specified location."""
         if self.where is None:
             raise Exception("Cannot update value if no where clause is given")
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         if self.unitful.unit.dim != value.unit.dim:
             raise Exception(
@@ -60,7 +60,7 @@ class UnitfulIndexer:
             )
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
-        assert isinstance(align_self_arr, jax.Array | np.ndarray)
+        assert isinstance(align_self_arr, (jax.Array, np.ndarray))
         if isinstance(align_self_arr, np.ndarray):
             new_val = np.copy(align_self_arr)
             new_val[self.where] += align_other.val
@@ -72,7 +72,7 @@ class UnitfulIndexer:
         """Set the leaf values at the specified location."""
         if self.where is None:
             raise Exception("Cannot update value if no where clause is given")
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         if self.unitful.unit.dim != value.unit.dim:
             raise Exception(
@@ -80,7 +80,7 @@ class UnitfulIndexer:
             )
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
-        assert isinstance(align_self_arr, jax.Array | np.ndarray)
+        assert isinstance(align_self_arr, (jax.Array, np.ndarray))
         if isinstance(align_self_arr, np.ndarray):
             new_val = np.copy(align_self_arr)
             new_val[self.where] += align_other.val
@@ -95,7 +95,7 @@ class UnitfulIndexer:
             )
         if self.where is None:
             raise Exception("Cannot update value if no where clause is given")
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         v = self.unitful.val
         if isinstance(v, np.ndarray):
@@ -112,7 +112,7 @@ class UnitfulIndexer:
             )
         if self.where is None:
             raise Exception("Cannot update value if no where clause is given")
-        if not isinstance(self.unitful.val, jax.Array | np.ndarray):
+        if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
         v = self.unitful.val
         if isinstance(v, np.ndarray):

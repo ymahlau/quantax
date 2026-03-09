@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, get_args
 
 import jax
 import numpy as np
@@ -32,14 +32,14 @@ class UnitfulTracer:
                 new_val = np.asarray(self.static_unitful.val)
                 self.static_unitful = self.static_unitful.updated_copy(val=new_val)
 
-            assert isinstance(self.static_unitful.val, StaticArrayLike)
+            assert isinstance(self.static_unitful.val, get_args(StaticArrayLike))
 
     def __mul__(self, other: Any) -> UnitfulTracer:
-        from quantax.functional.numpy import multiply
+        from quantax.functional.numpy.basic import multiply
 
         return multiply(self, other)  # ty:ignore[no-matching-overload]
 
     def __rmul__(self, other: Any) -> UnitfulTracer:
-        from quantax.functional.numpy import multiply
+        from quantax.functional.numpy.basic import multiply
 
         return multiply(other, self)  # ty:ignore[no-matching-overload]

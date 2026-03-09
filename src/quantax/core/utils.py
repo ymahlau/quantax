@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import math
 import types
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Sequence, get_args
 
 import jax
 import numpy as np
@@ -180,7 +180,7 @@ def dim_after_multiplication(
 def is_struct_optimizable(a: Any) -> bool:
     if is_traced(a):
         return False
-    if isinstance(a, PhysicalArrayLike):
+    if isinstance(a, get_args(PhysicalArrayLike)):
         return True
     if isinstance(a, Sequence):
         return all([is_struct_optimizable(a_i) for a_i in a])
@@ -190,7 +190,7 @@ def is_struct_optimizable(a: Any) -> bool:
 def can_perform_static_ops(x: StaticArrayLike | None):
     if x is None:
         return False
-    if isinstance(x, NonPhysicalArrayLike):
+    if isinstance(x, get_args(NonPhysicalArrayLike)):
         return False
     return True
 

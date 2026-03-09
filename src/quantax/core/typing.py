@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Tuple, Union
+from typing import Any, Tuple, Union, get_args
 
 import jax
 import jax.numpy as jnp
@@ -74,7 +74,7 @@ ShapedArrayLike = Union[
 AnyArrayLike = Union[
     int,
     bool,
-    np.bool,
+    np.bool_,
     float,
     complex,
     np.number,

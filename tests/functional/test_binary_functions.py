@@ -65,6 +65,6 @@ def test_same_result(op_name, x, y):
         res = fn(x, y)
         orig_res = orig_fn(x, y)
         assert jnp.allclose(res, orig_res)
-    
+
 
 

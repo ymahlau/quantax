@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, get_args
 
 import jax
 import jax.numpy as jnp
@@ -62,7 +62,7 @@ def convert_to_tracer(data):
     """
 
     def _conversion_helper(x: AnyArrayLike | Unitful) -> UnitfulTracer:
-        if isinstance(x, ShapedArrayLike):
+        if isinstance(x, get_args(ShapedArrayLike)):
             sd = jax.ShapeDtypeStruct(shape=x.shape, dtype=x.dtype)
         else:
             sd = None
@@ -80,7 +80,7 @@ def convert_to_tracer(data):
     leaves, treedef = jax.tree.flatten(tree=data, is_leaf=lambda x: isinstance(x, Unitful))
     converted_leaves = []
     for leaf in leaves:
-        if isinstance(leaf, AnyArrayLike | Unitful):
+        if isinstance(leaf, tuple(list(get_args(AnyArrayLike)) + [Unitful])):
             converted_leaves.append(_conversion_helper(leaf))
         else:
             converted_leaves.append(leaf)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, get_args
 
 import jax
 import jax.numpy as jnp
@@ -34,8 +34,8 @@ class Unitful(TreeClass):
     optimize_scale: bool = frozen_field(default=True)
 
     def _validate(self):
-        bad_dtype = isinstance(self.val, jax.Array | np.ndarray | np.number) and self.dtype not in PHYSICAL_DTYPES
-        if isinstance(self.val, NonPhysicalArrayLike) or bad_dtype:
+        bad_dtype = isinstance(self.val, (jax.Array, np.ndarray, np.number)) and self.dtype not in PHYSICAL_DTYPES
+        if isinstance(self.val, get_args(NonPhysicalArrayLike)) or bad_dtype:
             if self.scale != 0:
                 if isinstance(self.val, int):
                     raise Exception(f"Cannot have non-zero scale for integer {self}. Consider using float as input.")
@@ -50,7 +50,7 @@ class Unitful(TreeClass):
             return
         if not is_traced(self.val):
             # non-traced case: optimize scale
-            assert isinstance(self.val, PhysicalArrayLike)
+            assert isinstance(self.val, get_args(PhysicalArrayLike))
             optimized_val, power = best_scale(self.val, self.scale)
             self.val = optimized_val
             self.scale = self.scale - power
@@ -113,25 +113,25 @@ class Unitful(TreeClass):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        if isinstance(self.val, int | float | complex | bool):
+        if isinstance(self.val, (int, float, complex, bool)):
             return ()
         return self.val.shape
 
     @property
     def dtype(self):
-        if isinstance(self.val, int | float | complex | bool):
+        if isinstance(self.val, (int, float, complex, bool)):
             raise Exception("Python scalar does not have dtype attribute")
         return self.val.dtype
 
     @property
     def ndim(self):
-        if isinstance(self.val, int | float | complex | bool):
+        if isinstance(self.val, (int, float, complex, bool)):
             return 0
         return self.val.ndim
 
     @property
     def size(self):
-        if isinstance(self.val, int | float | complex | bool):
+        if isinstance(self.val, (int, float, complex, bool)):
             return 1
         return self.val.size
 
@@ -273,13 +273,13 @@ class Unitful(TreeClass):
         return gt(self, other)
 
     def __len__(self):
-        if not isinstance(self.val, jax.Array | np.ndarray):
+        if not isinstance(self.val, (jax.Array, np.ndarray)):
             return 1
         return len(self.val)
 
     def __getitem__(self, key: Any) -> "Unitful":
         """Enable numpy-style indexing"""
-        if not isinstance(self.val, jax.Array | np.ndarray):
+        if not isinstance(self.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot slice Unitful with python scalar value ({self.val})")
         if isinstance(key, Unitful):
             key = key.materialise()
@@ -296,7 +296,7 @@ class Unitful(TreeClass):
 
     def __iter__(self):
         """Use a generator for simplicity"""
-        if not isinstance(self.val, jax.Array | np.ndarray):
+        if not isinstance(self.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot iterate over Unitful with python scalar value ({self.val})")
         for v in self.val:
             yield (Unitful(val=v, unit=self.unit))
@@ -305,13 +305,13 @@ class Unitful(TreeClass):
         return iter(self[::-1])
 
     def __neg__(self) -> Unitful:
-        if isinstance(self.val, NonPhysicalArrayLike):
+        if isinstance(self.val, get_args(NonPhysicalArrayLike)):
             raise Exception(f"Cannot perform negation on non-physcal value {self}")
         return Unitful(val=-self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
 
     def __pos__(self) -> Unitful:
         """Unary plus: +x"""
-        if isinstance(self.val, NonPhysicalArrayLike):
+        if isinstance(self.val, get_args(NonPhysicalArrayLike)):
             raise Exception(f"Cannot perform unary plus on non-physcal value {self}")
         return Unitful(val=+self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
 
@@ -371,9 +371,9 @@ def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
     if glob.GLOBAL_REPLAY_DATA is not None:
         return False
     v = obj.val if isinstance(obj, Unitful) else obj
-    if isinstance(v, NonPhysicalArrayLike):
+    if isinstance(v, get_args(NonPhysicalArrayLike)):
         return False
-    if isinstance(v, jax.Array | np.ndarray) and v.dtype not in PHYSICAL_DTYPES:
+    if isinstance(v, (jax.Array, np.ndarray)) and v.dtype not in PHYSICAL_DTYPES:
         return False
     if is_traced(v) and not isinstance(obj, Unitful):
         return False

@@ -1,3 +1,5 @@
+from quantax.core.unit import Unit
+from quantax.functional import jit
 import math
 
 import jax
@@ -275,3 +277,39 @@ def test_multiply_jitted():
     res2 = jitted_fn(arr2, arr3)
 
     assert jnp.allclose(res1.value(), res2.value() * 1e3)
+
+
+_v = 5
+_w = Unitful(val=3.0)
+_u = Unitful(val=jnp.ones(shape=(1,)) * 6)
+
+def _fn(x: Unitful, y: Unitful, z: jax.Array):
+    def _inner_fn(x2, y2):
+        return x2 * y2
+    def _inner_fn2(a):
+        return a
+    tmp = _v * z
+    mid = x * y * tmp * _w * _u * 3
+    y2 = jit(_inner_fn2)(y)
+    out = jit(_inner_fn)(mid, y2)
+    return out
+
+def test_complicated_fn():
+    unit = Unit({SI.m: 1, SI.s: -1})
+    x = Unitful(
+        val=jnp.array(
+            [
+                [3.0, 4.0, 0.0],
+                [0.0, 6.0, 8.0],
+                [-5.0, 0.0, 12.0],
+            ]
+        ),
+        unit=unit,
+        scale=2,
+    )
+    y = Unitful(val=25.0, unit=unit, scale=0)
+    z = jnp.asarray([100.0])
+    res = jit(_fn)(x, y, z)
+    res_no_jit = _fn(x, y, z)
+    scale_diff = res.scale - res_no_jit.scale
+    assert jnp.allclose(res.val, res_no_jit.val * (10 ** (scale_diff)))

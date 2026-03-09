@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, get_args
 
 import jax
 import numpy as np
@@ -21,7 +21,7 @@ def hash_abstract_unitful_pytree(
     for leaf in leaves:
         if isinstance(leaf, Unitful):
             to_hash.append((leaf.scale, hash_abstract_arraylike(leaf.val)))
-        elif isinstance(leaf, AnyArrayLike):
+        elif isinstance(leaf, get_args(AnyArrayLike)):
             to_hash.append(hash_abstract_arraylike(leaf))
         else:
             raise Exception(f"Invalid hash input: {leaf}")
