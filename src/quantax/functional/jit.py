@@ -6,19 +6,17 @@ from typing import Any, Callable, get_args
 import jax
 import jax.numpy as jnp
 
-from quantax.core import glob
 from quantax.core.glob import (
     FunctionTransformNode,
     GlobalReplayData,
-    end_global_trace_data,
-    init_global_trace_data,
+    get_current_node,
+    get_global_replay_data,
+    global_trace_context,
+    node_context,
     register_node_input_output,
     register_node_pointer,
     register_tracer_for_current_context,
-    update_data_node_end,
-    update_data_node_start,
-    update_data_replay_end,
-    update_data_replay_start,
+    replay_context,
 )
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike
 from quantax.core.utils import get_all_closure_vars
@@ -41,8 +39,9 @@ class JitTransformNode(FunctionTransformNode):
         *args,
         **kwargs,
     ):
-        assert glob.GLOBAL_REPLAY_DATA is not None
-        cur_graph_data = glob.GLOBAL_REPLAY_DATA.graph_data_dict[self.id][0]
+        replay_data = get_global_replay_data()
+        assert replay_data is not None
+        cur_graph_data = replay_data.graph_data_dict[self.id][0]
         replay_fn = get_replay_function(
             graph_data=cur_graph_data,
             trace_args=self.trace_args,
@@ -119,7 +118,7 @@ class UnitfulJitWrapped:
 
         node = JitTransformNode(
             op_name="jit",
-            parent=glob.CURRENT_NODE,
+            parent=get_current_node(),
             op_kwargs={},
             is_outermost=(not has_tracer),
             jit_kwargs=self.jit_kwargs,
@@ -127,47 +126,52 @@ class UnitfulJitWrapped:
 
         if not has_tracer:
             # this is the outermost jit, we start tracing now
-            init_global_trace_data()
-            fn_args = convert_to_tracer(args)
-            fn_kwargs = convert_to_tracer(kwargs)
+            with global_trace_context() as global_data:
+                fn_args = convert_to_tracer(args)
+                fn_kwargs = convert_to_tracer(kwargs)
+                op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
+                node.op_kwargs = op_kwargs
+                node.trace_args = fn_args
+                node.trace_kwargs = fn_kwargs
+
+                with node_context(node):
+                    trace_result = trace_fn(
+                        fn=self.fun,
+                        fn_transform_node=node,
+                        fn_args=fn_args,
+                        fn_kwargs=fn_kwargs,
+                        input_tracer_list=list(op_kwargs.values()),
+                    )
+
+                node.output = trace_result
+
+            # global_data still valid here (object persists after context exit)
+            global_data.fn_transform_nodes[node.id] = node
         else:
             register_node_pointer(node)
             fn_args = args
             fn_kwargs = kwargs
+            op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
+            node.op_kwargs = op_kwargs
+            node.trace_args = fn_args
+            node.trace_kwargs = fn_kwargs
 
-        # update op kwarg entry of node (not possible before due to dependencies)
-        op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
-        node.op_kwargs = op_kwargs
-        node.trace_args = fn_args
-        node.trace_kwargs = fn_kwargs
+            with node_context(node):
+                trace_result = trace_fn(
+                    fn=self.fun,
+                    fn_transform_node=node,
+                    fn_args=fn_args,
+                    fn_kwargs=fn_kwargs,
+                    input_tracer_list=list(op_kwargs.values()),
+                )
 
-        # start node operation
-        prev_node = update_data_node_start(node)
-        trace_result = trace_fn(
-            fn=self.fun,
-            fn_transform_node=node,
-            fn_args=fn_args,
-            fn_kwargs=fn_kwargs,
-            input_tracer_list=list(op_kwargs.values()),
-        )
-
-        # signal node end
-        cur_node = update_data_node_end(prev_node)
-        result_leaves = jax.tree.leaves(trace_result, is_leaf=lambda x: isinstance(x, UnitfulTracer))
-        assert cur_node == node
-        node.output = trace_result
-
-        # if this was not the outermost jit, go back to tracing rest
-        if has_tracer:
+            node.output = trace_result
+            result_leaves = jax.tree.leaves(trace_result, is_leaf=lambda x: isinstance(x, UnitfulTracer))
             register_tracer_for_current_context(result_leaves)
             register_node_input_output(node)
             return trace_result
 
-        # if this was outermost jit, we are done tracing
-        global_data = end_global_trace_data()
-        global_data.fn_transform_nodes[node.id] = node
-
-        # optimize unitful scale assignment
+        # if this was outermost jit, we are done tracing; optimize unitful scale assignment
         scale_assignment = solve_scale_assignment(
             trace_args=fn_args,
             trace_kwargs=fn_kwargs,
@@ -189,12 +193,8 @@ class UnitfulJitWrapped:
             graph_data_dict=data_dict,
             scale_assignment=scale_assignment,
         )
-        update_data_replay_start(global_replay_data)
-        result = node.replay_node(
-            *args,
-            **kwargs,
-        )
-        update_data_replay_end()
+        with replay_context(global_replay_data):
+            result = node.replay_node(*args, **kwargs)
 
         return result
 

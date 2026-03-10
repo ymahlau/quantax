@@ -4,8 +4,7 @@ from typing import Any, Callable
 
 import jax
 
-from quantax.core import glob
-from quantax.core.glob import FunctionTransformNode, OperatorNode
+from quantax.core.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
 from quantax.core.typing import AnyArrayLike
 from quantax.functional.collection import FUNCTION_DICT
 from quantax.tracing.graph import GraphData
@@ -36,13 +35,14 @@ def get_replay_function(
         kwargs_leaves, kwargs_treedef = jax.tree.flatten(kwargs, lambda x: isinstance(x, Unitful))
 
         # sanity checks
-        assert glob.GLOBAL_REPLAY_DATA is not None
+        replay_data = get_global_replay_data()
+        assert replay_data is not None
         assert args_treedef == args_trace_treedef
         assert kwargs_treedef == kwargs_trace_treedef
         assert len(args_leaves) == len(args_trace_leaves)
         assert len(kwargs_leaves) == len(kwargs_trace_leaves)
-        global_value_dict = glob.GLOBAL_REPLAY_DATA.value_dict
-        scale_assignment = glob.GLOBAL_REPLAY_DATA.scale_assignment
+        global_value_dict = replay_data.value_dict
+        scale_assignment = replay_data.scale_assignment
 
         # add inputs to value dictionary
         for leaf, t in zip(args_leaves, args_trace_leaves):

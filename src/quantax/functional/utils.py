@@ -6,9 +6,8 @@ import jax
 
 from quantax.core.glob import (
     FunctionTransformNode,
+    fn_trace_context,
     register_tracer_for_current_context,
-    update_data_fn_end,
-    update_data_fn_start,
 )
 from quantax.functional.artificial import noop
 from quantax.unitful.tracer import UnitfulTracer
@@ -31,15 +30,15 @@ def parse_arg_kwargs(args, kwargs) -> dict[str, UnitfulTracer]:
 def trace_fn(
     fn: Callable, fn_transform_node: FunctionTransformNode, fn_args, fn_kwargs, input_tracer_list: list[UnitfulTracer]
 ):
-    prev_data = update_data_fn_start()
-    register_tracer_for_current_context(input_tracer_list)
-    trace_result = fn(*fn_args, **fn_kwargs)
-    # TODO: technically it is only necessary to copy the output if it is an unchanged input tracer. This could reduce variable count in MILP
-    result_copy = jax.tree.map(
-        lambda x: noop(x), trace_result, is_leaf=lambda x: isinstance(x, (Unitful, UnitfulTracer))
-    )
+    with fn_trace_context() as cur_data:
+        register_tracer_for_current_context(input_tracer_list)
+        trace_result = fn(*fn_args, **fn_kwargs)
+        # TODO: technically it is only necessary to copy the output if it is an unchanged input tracer. This could reduce variable count in MILP
+        result_copy = jax.tree.map(
+            lambda x: noop(x), trace_result, is_leaf=lambda x: isinstance(x, (Unitful, UnitfulTracer))
+        )
+        cur_data.output_tracer = result_copy
 
-    cur_data = update_data_fn_end(prev_data, result=result_copy)
     fn_transform_node.fn_tracers.append(cur_data)
 
     return result_copy

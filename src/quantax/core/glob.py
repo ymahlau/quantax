@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -13,10 +15,66 @@ if TYPE_CHECKING:
     from quantax.unitful.tracer import UnitfulTracer
     from quantax.unitful.unitful import Unitful
 
-CURRENT_NODE: FunctionTransformNode | None = None
-CURRENT_TRACE_DATA: TraceData | None = None
-GLOBAL_TRACE_DATA: GlobalTraceData | None = None
-GLOBAL_REPLAY_DATA: GlobalReplayData | None = None
+_current_node: ContextVar[FunctionTransformNode | None] = ContextVar('current_node', default=None)
+_current_trace_data: ContextVar[TraceData | None] = ContextVar('current_trace_data', default=None)
+_global_trace_data: ContextVar[GlobalTraceData | None] = ContextVar('global_trace_data', default=None)
+_global_replay_data: ContextVar[GlobalReplayData | None] = ContextVar('global_replay_data', default=None)
+
+
+def get_current_node() -> FunctionTransformNode | None:
+    return _current_node.get()
+
+
+def get_current_trace_data() -> TraceData | None:
+    return _current_trace_data.get()
+
+
+def get_global_trace_data() -> GlobalTraceData | None:
+    return _global_trace_data.get()
+
+
+def get_global_replay_data() -> GlobalReplayData | None:
+    return _global_replay_data.get()
+
+
+@contextmanager
+def global_trace_context():
+    assert _global_trace_data.get() is None, "Trace end not called properly"
+    new_data = GlobalTraceData()
+    token = _global_trace_data.set(new_data)
+    try:
+        yield new_data
+    finally:
+        _global_trace_data.reset(token)
+
+
+@contextmanager
+def fn_trace_context():
+    new_data = TraceData()
+    token = _current_trace_data.set(new_data)
+    try:
+        yield new_data
+    finally:
+        _current_trace_data.reset(token)
+
+
+@contextmanager
+def node_context(new_node: FunctionTransformNode):
+    token = _current_node.set(new_node)
+    try:
+        yield
+    finally:
+        _current_node.reset(token)
+
+
+@contextmanager
+def replay_context(global_replay_data: GlobalReplayData):
+    assert _global_replay_data.get() is None, "Replay end not called properly before starting new replay"
+    token = _global_replay_data.set(global_replay_data)
+    try:
+        yield
+    finally:
+        _global_replay_data.reset(token)
 
 
 @dataclass(kw_only=True)
@@ -129,72 +187,6 @@ class GlobalReplayData:
     value_dict: dict[int, Unitful | AnyArrayLike] = field(default_factory=dict)
 
 
-def init_global_trace_data():
-    global GLOBAL_TRACE_DATA
-    assert GLOBAL_TRACE_DATA is None, "Trace end not called properly"
-    GLOBAL_TRACE_DATA = GlobalTraceData()
-
-
-def end_global_trace_data() -> GlobalTraceData:
-    global GLOBAL_TRACE_DATA
-    assert GLOBAL_TRACE_DATA is not None, "Trace start not called properly"
-    cur_data = GLOBAL_TRACE_DATA
-    GLOBAL_TRACE_DATA = None
-    return cur_data
-
-
-def update_data_fn_start() -> TraceData | None:
-    global CURRENT_TRACE_DATA
-    prev_data = CURRENT_TRACE_DATA
-
-    CURRENT_TRACE_DATA = TraceData()
-
-    return prev_data
-
-
-def update_data_fn_end(prev_data: TraceData | None, result: Any) -> TraceData:
-    global CURRENT_TRACE_DATA
-
-    finished_data = CURRENT_TRACE_DATA
-    assert finished_data is not None, "fn start was not called before fn end"
-    CURRENT_TRACE_DATA = prev_data
-    finished_data.output_tracer = result
-
-    return finished_data
-
-
-def update_data_node_start(new_node: FunctionTransformNode):
-    global CURRENT_NODE
-    prev_node = CURRENT_NODE
-
-    CURRENT_NODE = new_node
-
-    return prev_node
-
-
-def update_data_node_end(prev_node: FunctionTransformNode):
-    global CURRENT_NODE
-    cur_node = CURRENT_NODE
-    CURRENT_NODE = prev_node
-    return cur_node
-
-
-def update_data_replay_start(
-    global_replay_data: GlobalReplayData,
-):
-    global GLOBAL_REPLAY_DATA
-
-    assert GLOBAL_REPLAY_DATA is None, "scale assignment end was not called properly before starting new replay"
-    GLOBAL_REPLAY_DATA = global_replay_data
-    assert GLOBAL_REPLAY_DATA is not None
-
-
-def update_data_replay_end():
-    global GLOBAL_REPLAY_DATA
-    assert GLOBAL_REPLAY_DATA is not None, "scale assignment start was not called before end"
-    GLOBAL_REPLAY_DATA = None
-
-
 def register_node_full(node: OperatorNode):
     register_node_pointer(node)
     register_node_input(node)
@@ -207,53 +199,58 @@ def register_node_input_output(node: OperatorNode):
 
 
 def register_node_pointer(node: OperatorNode) -> None:
-    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
-    assert GLOBAL_TRACE_DATA is not None
-    assert CURRENT_TRACE_DATA is not None
+    global_td = get_global_trace_data()
+    current_td = get_current_trace_data()
+    assert global_td is not None
+    assert current_td is not None
     assert node.id == -1, f"node has already been registered: {node}"
-    node.id = len(GLOBAL_TRACE_DATA)
+    node.id = len(global_td)
     if not isinstance(node, FunctionTransformNode):
-        GLOBAL_TRACE_DATA.pure_operator_nodes[node.id] = node
+        global_td.pure_operator_nodes[node.id] = node
     else:
-        GLOBAL_TRACE_DATA.fn_transform_nodes[node.id] = node
-    CURRENT_TRACE_DATA.operator_nodes[node.id] = node
+        global_td.fn_transform_nodes[node.id] = node
+    current_td.operator_nodes[node.id] = node
 
 
 def register_node_input(node: OperatorNode):
-    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
-    assert CURRENT_TRACE_DATA is not None
+    global_td = get_global_trace_data()
+    current_td = get_current_trace_data()
+    assert current_td is not None
     for t in node.op_kwargs.values():
-        CURRENT_TRACE_DATA.node_in_edges.append((t.id, node.id))
+        current_td.node_in_edges.append((t.id, node.id))
         # global graph does not consider function transform a node, only trace basic operations
         if not isinstance(node, FunctionTransformNode):
-            assert GLOBAL_TRACE_DATA is not None
-            GLOBAL_TRACE_DATA.node_in_edges.append((t.id, node.id))
+            assert global_td is not None
+            global_td.node_in_edges.append((t.id, node.id))
 
 
 def register_node_output(node: OperatorNode):
-    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
-    assert CURRENT_TRACE_DATA is not None
-    assert GLOBAL_TRACE_DATA is not None
+    global_td = get_global_trace_data()
+    current_td = get_current_trace_data()
+    assert current_td is not None
+    assert global_td is not None
     trace_leaves = jax.tree.leaves(node.output)
     for t in trace_leaves:
-        CURRENT_TRACE_DATA.node_out_edges.append((node.id, t.id))
+        current_td.node_out_edges.append((node.id, t.id))
         # global graph does not consider function transform a node, only trace basic operations
         if not isinstance(node, FunctionTransformNode):
-            GLOBAL_TRACE_DATA.node_out_edges.append((node.id, t.id))
+            global_td.node_out_edges.append((node.id, t.id))
 
 
 def register_tracer(t: UnitfulTracer):
-    global GLOBAL_TRACE_DATA, CURRENT_TRACE_DATA
-    assert GLOBAL_TRACE_DATA is not None
-    t_idx = len(GLOBAL_TRACE_DATA)
+    global_td = get_global_trace_data()
+    current_td = get_current_trace_data()
+    assert global_td is not None
+    t_idx = len(global_td)
     t.id = t_idx
-    GLOBAL_TRACE_DATA.tracer_nodes[t.id] = t
-    if CURRENT_TRACE_DATA is not None:
-        CURRENT_TRACE_DATA.tracer_nodes[t.id] = t
+    global_td.tracer_nodes[t.id] = t
+    if current_td is not None:
+        current_td.tracer_nodes[t.id] = t
 
 
 def register_tracer_for_current_context(tracer_list: list[UnitfulTracer]):
-    assert CURRENT_TRACE_DATA is not None
+    current_td = get_current_trace_data()
+    assert current_td is not None
     for t in tracer_list:
-        if t.id not in CURRENT_TRACE_DATA.tracer_nodes:
-            CURRENT_TRACE_DATA.tracer_nodes[t.id] = t
+        if t.id not in current_td.tracer_nodes:
+            current_td.tracer_nodes[t.id] = t

@@ -368,7 +368,7 @@ class Unitful(TreeClass):
 
 def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
     # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
-    if glob.GLOBAL_REPLAY_DATA is not None:
+    if glob.get_global_replay_data() is not None:
         return False
     v = obj.val if isinstance(obj, Unitful) else obj
     if isinstance(v, get_args(NonPhysicalArrayLike)):
