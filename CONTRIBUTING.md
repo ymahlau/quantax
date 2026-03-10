@@ -240,7 +240,7 @@ class <Name>TransformNode(FunctionTransformNode):
 
 **2. Write the wrapper callable**
 
-The callable intercepts the JAX transform. When called without an enclosing traced context (`not has_tracer`), just call the original function. When called inside an already-traced context, register the node and return tracers.
+The callable intercepts the JAX transform. When called without an enclosing traced context (`not has_tracer`), start the tracing mechanism, solve the MILP and replay the functions used. When called inside an already-traced context, register the node and return tracers.
 
 **3. Register in `patching.py` only**
 
