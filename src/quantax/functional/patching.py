@@ -6,7 +6,11 @@ from fastcore.foundation import copy_func
 from quantax.functional.jit import jit
 from quantax.functional.numpy.basic import (
     multiply,
+    divide,
+    add,
+    subtract
 )
+from quantax.functional.numpy.comparisons import eq, ge, gt, le, lt, ne
 
 
 def patch_fn_to_module(
@@ -29,16 +33,16 @@ def patch_all_functions_jax():
     ## add to original jax.numpy ###################
     _full_patch_list_numpy = [
         (multiply, None),
-        # (divide, None),
-        # (divide, "true_divide"),
-        # (add, None),
-        # (subtract, None),
-        # (lt, "less"),
-        # (le, "less_equal"),
-        # (eq, "equal"),
-        # (ne, "not_equal"),
-        # (ge, "greater_equal"),
-        # (gt, "greater"),
+        (divide, None),
+        (divide, "true_divide"),
+        (add, None),
+        (subtract, None),
+        (lt, "less"),
+        (le, "less_equal"),
+        (eq, "equal"),
+        (ne, "not_equal"),
+        (ge, "greater_equal"),
+        (gt, "greater"),
         # (matmul, None),
         # (pow, None),
         # (sqrt, None),
@@ -107,12 +111,12 @@ def patch_all_functions_jax():
 
     ## add to jax.lax ###################
     _full_patch_list_lax = [
-        # (lt, None),
-        # (le, None),
-        # (eq, None),
-        # (ne, None),
-        # (ge, None),
-        # (gt, None),
+        (lt, None),
+        (le, None),
+        (eq, None),
+        (ne, None),
+        (ge, None),
+        (gt, None),
         # (pow, None),
         # (sqrt, None),
         # (sin, None),

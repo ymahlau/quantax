@@ -209,6 +209,38 @@ class Unitful(TreeClass):
 
         return subtract(other, self)
 
+    def __eq__(self, other):
+        from quantax.functional.numpy.comparisons import eq
+
+        return eq(self, other)
+
+    __hash__ = object.__hash__
+
+    def __ne__(self, other):
+        from quantax.functional.numpy.comparisons import ne
+
+        return ne(self, other)
+
+    def __lt__(self, other):
+        from quantax.functional.numpy.comparisons import lt
+
+        return lt(self, other)
+
+    def __le__(self, other):
+        from quantax.functional.numpy.comparisons import le
+
+        return le(self, other)
+
+    def __gt__(self, other):
+        from quantax.functional.numpy.comparisons import gt
+
+        return gt(self, other)
+
+    def __ge__(self, other):
+        from quantax.functional.numpy.comparisons import ge
+
+        return ge(self, other)
+
     def __len__(self):
         if not isinstance(self.val, (jax.Array, np.ndarray)):
             return 1
