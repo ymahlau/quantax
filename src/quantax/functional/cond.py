@@ -1,10 +1,10 @@
+from quantax.unitful.utils import check_jax_unitful_tracer_type
 from typing import Callable, TypeVar
 
 import jax
 import numpy as np
 from typing_extensions import TypeVarTuple, Unpack
 
-from quantax.functional.utils import check_jax_unitful_tracer_type
 from quantax.unitful.unitful import Unitful
 
 Ts = TypeVarTuple("Ts")
@@ -22,17 +22,13 @@ def cond(
 
     # CASE 1: traced implementation
     if has_tracer:
-        node = OperatorNode(
-            op_name="cond",
-            args={"pred": pred, "true_fun": true_fun, "false_fun": false_fun, "*operands": operands},
-        )
         pass
 
     # CASE 2: unitful eager implementation
     if has_unitful:
         pass
 
-    # CASE 3: standard jax call
+    # CASE 3: standard jax call, todo: use original function similar to how jit impl. does it
     return jax.lax.cond(
         pred,
         true_fun,

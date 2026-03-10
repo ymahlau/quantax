@@ -162,25 +162,25 @@ class Unitful(TreeClass):
             " implemented, just the internals of Unitful should not changed this way."
         )
 
-    def astype(self, *args, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import astype
+    # def astype(self, *args, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import astype
 
-        return astype(self, *args, **kwargs)
+    #     return astype(self, *args, **kwargs)
 
-    def squeeze(
-        self,
-        axis: int | None = None,
-    ) -> "Unitful":
-        from quantax.functional.numpy import squeeze
+    # def squeeze(
+    #     self,
+    #     axis: int | None = None,
+    # ) -> "Unitful":
+    #     from quantax.functional.numpy import squeeze
 
-        return squeeze(self, axis)
+    #     return squeeze(self, axis)
 
-    def reshape(
-        self,
-        *args,
-        **kwargs,
-    ) -> "Unitful":
-        from quantax.functional.numpy import reshape
+    # def reshape(
+    #     self,
+    #     *args,
+    #     **kwargs,
+    # ) -> "Unitful":
+    #     from quantax.functional.numpy import reshape
 
         return reshape(self, args, **kwargs)
 
@@ -213,62 +213,62 @@ class Unitful(TreeClass):
         return multiply(other, self)
 
     def __truediv__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
-        from quantax.functional.numpy import divide
+        from quantax.functional.numpy.basic import divide
 
         return divide(self, other)
 
     def __rtruediv__(self, other: PhysicalArrayLike | "Unitful") -> "Unitful":
-        from quantax.functional.numpy import divide
+        from quantax.functional.numpy.basic import divide
 
         return divide(other, self)
 
     def __add__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import add
+        from quantax.functional.numpy.basic import add
 
         return add(self, other)
 
     def __radd__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import add
+        from quantax.functional.numpy.basic import add
 
         return add(self, other)
 
     def __sub__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import subtract
+        from quantax.functional.numpy.basic import subtract
 
         return subtract(self, other)
 
     def __rsub__(self, other: "Unitful | PhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import subtract
+        from quantax.functional.numpy.basic import subtract
 
         return subtract(other, self)
 
-    def __lt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import lt
+    # def __lt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+    #     from quantax.functional.numpy import lt
 
-        return lt(self, other)
+    #     return lt(self, other)
 
-    def __le__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import le
+    # def __le__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+    #     from quantax.functional.numpy import le
 
-        return le(self, other)
+    #     return le(self, other)
 
-    def __eq__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]
-        from quantax.functional.numpy import eq
+    # def __eq__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]
+    #     from quantax.functional.numpy import eq
 
-        return eq(self, other)
+    #     return eq(self, other)
 
-    def __ne__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]  # allow non-bool return for array-style comparison
-        from quantax.functional.numpy import ne
+    # def __ne__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]  # allow non-bool return for array-style comparison
+    #     from quantax.functional.numpy import ne
 
-        return ne(self, other)
+    #     return ne(self, other)
 
-    def __ge__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import ge
+    # def __ge__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+    #     from quantax.functional.numpy import ge
 
-        return ge(self, other)
+    #     return ge(self, other)
 
-    def __gt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-        from quantax.functional.numpy import gt
+    # def __gt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+    #     from quantax.functional.numpy import gt
 
         return gt(self, other)
 
@@ -307,63 +307,63 @@ class Unitful(TreeClass):
     def __neg__(self) -> Unitful:
         if isinstance(self.val, get_args(NonPhysicalArrayLike)):
             raise Exception(f"Cannot perform negation on non-physcal value {self}")
-        return Unitful(val=-self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
+        return Unitful(val=-self.val, unit=self.unit)
 
     def __pos__(self) -> Unitful:
         """Unary plus: +x"""
         if isinstance(self.val, get_args(NonPhysicalArrayLike)):
             raise Exception(f"Cannot perform unary plus on non-physcal value {self}")
-        return Unitful(val=+self.val, unit=self.unit)  # ty:ignore[unsupported-operator]
+        return Unitful(val=+self.val, unit=self.unit)
 
-    def __abs__(self):
-        from quantax.functional.numpy import abs_impl
+    # def __abs__(self):
+    #     from quantax.functional.numpy import abs_impl
 
-        return abs_impl(self)
+    #     return abs_impl(self)
 
-    def __matmul__(self, other: "Unitful") -> "Unitful":
-        from quantax.functional.numpy import matmul
+    # def __matmul__(self, other: "Unitful") -> "Unitful":
+    #     from quantax.functional.numpy import matmul
 
-        return matmul(self, other)
+    #     return matmul(self, other)
 
-    def __pow__(self, other: int) -> "Unitful":
-        from quantax.functional.numpy import pow
+    # def __pow__(self, other: int) -> "Unitful":
+    #     from quantax.functional.numpy import pow
 
-        return pow(self, other)
+    #     return pow(self, other)
 
-    def min(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import min
+    # def min(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import min
 
-        return min(self, **kwargs)
+    #     return min(self, **kwargs)
 
-    def max(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import max
+    # def max(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import max
 
-        return max(self, **kwargs)
+    #     return max(self, **kwargs)
 
-    def mean(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import mean
+    # def mean(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import mean
 
-        return mean(self, **kwargs)
+    #     return mean(self, **kwargs)
 
-    def sum(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import sum
+    # def sum(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import sum
 
-        return sum(self, **kwargs)
+    #     return sum(self, **kwargs)
 
-    def prod(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import prod
+    # def prod(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import prod
 
-        return prod(self, **kwargs)
+    #     return prod(self, **kwargs)
 
-    def argmax(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import argmax
+    # def argmax(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import argmax
 
-        return argmax(self, **kwargs)
+    #     return argmax(self, **kwargs)
 
-    def argmin(self, **kwargs) -> "Unitful":
-        from quantax.functional.numpy import argmin
+    # def argmin(self, **kwargs) -> "Unitful":
+    #     from quantax.functional.numpy import argmin
 
-        return argmin(self, **kwargs)
+    #     return argmin(self, **kwargs)
 
 
 def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
