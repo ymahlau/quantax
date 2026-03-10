@@ -4,7 +4,12 @@ import pytest
 from quantax.functional.collection import FUNCTION_DICT, ORIG_FUNCTION_DICT
 from quantax.unitful.unitful import Unitful
 
-BINARY_FNS = ["multiply"]
+BINARY_FNS = [
+    "multiply",
+    "add",
+    "subtract",
+    "divide",
+]
 
 
 def get_binary_function_list_from_op(op):

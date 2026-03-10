@@ -35,10 +35,8 @@ class UnitfulIndexer:
             raise Exception("Cannot update value if no where clause is given")
         if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
-        if self.unitful.unit.dim != value.unit.dim:
-            raise Exception(
-                f"Cannot update array value with different unit: {self.unitful.unit.dim} != {value.unit.dim}"
-            )
+        if self.unitful.unit != value.unit:
+            raise Exception(f"Cannot update array value with different unit: {self.unitful.unit} != {value.unit}")
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
         assert isinstance(align_self_arr, (jax.Array, np.ndarray))
@@ -55,10 +53,8 @@ class UnitfulIndexer:
             raise Exception("Cannot update value if no where clause is given")
         if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
-        if self.unitful.unit.dim != value.unit.dim:
-            raise Exception(
-                f"Cannot update array value with different unit: {self.unitful.unit.dim} != {value.unit.dim}"
-            )
+        if self.unitful.unit != value.unit:
+            raise Exception(f"Cannot update array value with different unit: {self.unitful.unit} != {value.unit}")
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
         assert isinstance(align_self_arr, (jax.Array, np.ndarray))
@@ -75,10 +71,8 @@ class UnitfulIndexer:
             raise Exception("Cannot update value if no where clause is given")
         if not isinstance(self.unitful.val, (jax.Array, np.ndarray)):
             raise Exception(f"Cannot index scalar value: {self.unitful}")
-        if self.unitful.unit.dim != value.unit.dim:
-            raise Exception(
-                f"Cannot update array value with different unit: {self.unitful.unit.dim} != {value.unit.dim}"
-            )
+        if self.unitful.unit != value.unit:
+            raise Exception(f"Cannot update array value with different unit: {self.unitful.unit} != {value.unit}")
         align_self, align_other = align_scales(self.unitful, value)
         align_self_arr = align_self.val
         assert isinstance(align_self_arr, (jax.Array, np.ndarray))

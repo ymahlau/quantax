@@ -6,13 +6,9 @@ from quantax.unitful.unitful import (
     Unitful,
 )
 
-# patch_all_functions_jax()
-
-
 __all__ = [
+    "patch_all_functions_jax",
     "Unit",
     "Unitful",
     "SI",
-    # "units",
-    # "functional",
 ]

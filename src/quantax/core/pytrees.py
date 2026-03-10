@@ -231,7 +231,7 @@ class TreeClass(tc.TreeClass):
             else:
                 raise Exception(f"Invalid operation type: {op_type}. This is an internal bug!")
             if idx != len(ops) - 1:
-                attr_list.append(current_parent)
+                attr_list.append(current_parent)  # type: ignore
 
         # from bottom-up set attributes and update
         cur_attr = val
