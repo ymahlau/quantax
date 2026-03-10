@@ -21,7 +21,7 @@ from quantax.core.glob import (
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike
 from quantax.core.utils import get_all_closure_vars
 from quantax.functional.utils import parse_arg_kwargs, trace_fn
-from quantax.tracing.graph import GraphData, create_graph_from_trace
+from quantax.tracing.graph import create_graph_from_trace
 from quantax.tracing.optimization import solve_scale_assignment
 from quantax.tracing.replay import get_replay_function
 from quantax.unitful.tracer import UnitfulTracer
@@ -169,8 +169,7 @@ class UnitfulJitWrapped:
 
         # compute topological ordering for every node
         data_dict = {
-            n.id: [create_graph_from_trace(td) for td in n.fn_tracers]
-            for n in global_data.fn_transform_nodes.values()
+            n.id: [create_graph_from_trace(td) for td in n.fn_tracers] for n in global_data.fn_transform_nodes.values()
         }
 
         # replay the function

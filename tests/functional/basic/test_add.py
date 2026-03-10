@@ -1,5 +1,3 @@
-from quantax.core.unit import Unit
-from quantax.functional import jit
 import math
 
 import jax
@@ -8,9 +6,11 @@ import numpy as np
 import pytest
 
 from quantax.core.typing import SI
+from quantax.core.unit import Unit
+from quantax.functional import jit
 from quantax.functional.numpy.basic import add
 from quantax.unitful.unitful import Unitful
-from quantax.units import Hz, ms, s, m
+from quantax.units import Hz, ms, s
 
 
 def test_add_unitful_same_unit_same_scale():
@@ -26,8 +26,8 @@ def test_add_unitful_same_unit_same_scale():
 
 def test_add_unitful_same_unit_different_scales():
     """Test addition of two Unitful objects with same unit but different scales"""
-    a = 1 * s     # scale 0
-    b = 1 * ms    # scale -3
+    a = 1 * s  # scale 0
+    b = 1 * ms  # scale -3
 
     result = add(a, b)
 
@@ -152,6 +152,7 @@ _w = Unitful(val=3.0, unit=Unit({SI.s: 1}), scale=0)
 def _add_fn(x: Unitful, y: Unitful):
     def _inner(a):
         return add(a, _w)  # _w captured as closure
+
     mid = add(x, y)
     out = jit(_inner)(mid)
     return out
@@ -163,4 +164,4 @@ def test_complicated_add_fn():
     res = jit(_add_fn)(x, y)
     res_no_jit = _add_fn(x, y)
     scale_diff = res.scale - res_no_jit.scale
-    assert jnp.allclose(res.val, res_no_jit.val * (10 ** scale_diff))
+    assert jnp.allclose(res.val, res_no_jit.val * (10**scale_diff))

@@ -4,29 +4,37 @@ import pytest
 from quantax.functional.collection import FUNCTION_DICT, ORIG_FUNCTION_DICT
 from quantax.unitful.unitful import Unitful
 
-BINARY_FNS = [
-    "multiply"
-]
+BINARY_FNS = ["multiply"]
+
 
 def get_binary_function_list_from_op(op):
     # test functions
     def _fn0(x, y):
         return op(x, y)
+
     def _fn1(x, y):
         return op(op(op(op(x, y), y), x), y)
+
     def _fn2(x, y):
         return op(op(x, y), op(x, y))
+
     def _fn3(x, y):
         return op(op(x, y), 1)
+
     def _fn4(x, y):
         return op(x, 1)
+
     def _fn5(x, y):
         return op(y, 1)
+
     def _fn6(x, y):
         return op(op(x, y), jnp.asarray(1.0))
+
     one = jnp.asarray(1.0)
+
     def _fn7(x, y):
         return op(one, op(x, y))
+
     return [
         _fn0,
         _fn1,
@@ -65,6 +73,3 @@ def test_same_result(op_name, x, y):
         res = fn(x, y)
         orig_res = orig_fn(x, y)
         assert jnp.allclose(res, orig_res)
-
-
-

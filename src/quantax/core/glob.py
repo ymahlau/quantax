@@ -15,10 +15,10 @@ if TYPE_CHECKING:
     from quantax.unitful.tracer import UnitfulTracer
     from quantax.unitful.unitful import Unitful
 
-_current_node: ContextVar[FunctionTransformNode | None] = ContextVar('current_node', default=None)
-_current_trace_data: ContextVar[TraceData | None] = ContextVar('current_trace_data', default=None)
-_global_trace_data: ContextVar[GlobalTraceData | None] = ContextVar('global_trace_data', default=None)
-_global_replay_data: ContextVar[GlobalReplayData | None] = ContextVar('global_replay_data', default=None)
+_current_node: ContextVar[FunctionTransformNode | None] = ContextVar("current_node", default=None)
+_current_trace_data: ContextVar[TraceData | None] = ContextVar("current_trace_data", default=None)
+_global_trace_data: ContextVar[GlobalTraceData | None] = ContextVar("global_trace_data", default=None)
+_global_replay_data: ContextVar[GlobalReplayData | None] = ContextVar("global_replay_data", default=None)
 
 
 def get_current_node() -> FunctionTransformNode | None:

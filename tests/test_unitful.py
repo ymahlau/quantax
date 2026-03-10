@@ -14,7 +14,6 @@
 # from quantax.unitful.unitful import Unitful
 
 
-
 # def test_multiply_unitful_unitful_same_dimensions():
 #     """Test multiplication of two Unitful objects with same dimensions"""
 #     time1 = s * 2

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, overload, get_args
+from typing import Any, get_args, overload
 
 import jax
 import numpy as np
@@ -262,9 +262,7 @@ def add(x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 def add(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     def _add_unitful(x: Unitful, y: Unitful):
         if x.unit != y.unit:
-            raise ValueError(
-                f"Cannot add Unitful arrays with different units: {x.unit} vs {y.unit}"
-            )
+            raise ValueError(f"Cannot add Unitful arrays with different units: {x.unit} vs {y.unit}")
         new_scale, fx, fy = handle_different_scales(x.scale, y.scale)
         new_val = x.val * fx + y.val * fy
         return Unitful(val=new_val, unit=x.unit, scale=new_scale, optimize_scale=False)
@@ -316,6 +314,7 @@ def add(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
 
 
 ## Subtraction ###########################
+
 
 def get_subtract_original():
     if hasattr(jax.numpy, "_orig_subtract"):
@@ -394,9 +393,7 @@ def subtract(x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 def subtract(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     def _sub_unitful(x: Unitful, y: Unitful):
         if x.unit != y.unit:
-            raise ValueError(
-                f"Cannot subtract Unitful arrays with different units: {x.unit} vs {y.unit}"
-            )
+            raise ValueError(f"Cannot subtract Unitful arrays with different units: {x.unit} vs {y.unit}")
         new_scale, fx, fy = handle_different_scales(x.scale, y.scale)
         new_val = x.val * fx - y.val * fy
         return Unitful(val=new_val, unit=x.unit, scale=new_scale, optimize_scale=False)

@@ -11,7 +11,6 @@
 # from quantax.unitful.unitful import Unitful
 
 
-
 # def test_sqrt_unitful_even_integer_dimensions():
 #     """Test sqrt with Unitful object having even integer dimensions"""
 #     # Create a unit with m^2 dimension (area)

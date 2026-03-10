@@ -4,10 +4,17 @@ from typing import Callable
 
 from quantax.functional.artificial import constraints_noop, noop
 from quantax.functional.numpy.basic import (
-    constraints_multiply, get_multiply_original, multiply,
-    constraints_add_sub, get_add_original, add,
-    get_subtract_original, subtract,
-    constraints_divide, get_divide_original, divide,
+    add,
+    constraints_add_sub,
+    constraints_divide,
+    constraints_multiply,
+    divide,
+    get_add_original,
+    get_divide_original,
+    get_multiply_original,
+    get_subtract_original,
+    multiply,
+    subtract,
 )
 
 CONSTRAINTS_DICT: dict[str, Callable] = {

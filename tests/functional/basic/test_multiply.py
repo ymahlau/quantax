@@ -1,5 +1,3 @@
-from quantax.core.unit import Unit
-from quantax.functional import jit
 import math
 
 import jax
@@ -8,6 +6,8 @@ import numpy as np
 import pytest
 
 from quantax.core.typing import SI
+from quantax.core.unit import Unit
+from quantax.functional import jit
 from quantax.functional.numpy.basic import multiply
 from quantax.unitful.unitful import Unitful
 from quantax.units import Hz, ms, s
@@ -283,16 +283,20 @@ _v = 5
 _w = Unitful(val=3.0)
 _u = Unitful(val=jnp.ones(shape=(1,)) * 6)
 
+
 def _fn(x: Unitful, y: Unitful, z: jax.Array):
     def _inner_fn(x2, y2):
         return x2 * y2
+
     def _inner_fn2(a):
         return a
+
     tmp = _v * z
     mid = x * y * tmp * _w * _u * 3
     y2 = jit(_inner_fn2)(y)
     out = jit(_inner_fn)(mid, y2)
     return out
+
 
 def test_complicated_fn():
     unit = Unit({SI.m: 1, SI.s: -1})

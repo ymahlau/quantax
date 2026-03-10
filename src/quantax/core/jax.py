@@ -11,5 +11,3 @@ def is_currently_compiling() -> bool:
 
 def is_traced(x) -> bool:
     return isinstance(x, core.Tracer)
-
-

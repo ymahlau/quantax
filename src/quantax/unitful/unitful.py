@@ -14,7 +14,6 @@ from quantax.core.typing import (
     AnyArrayLike,
     NonPhysicalArrayLike,
     PhysicalArrayLike,
-    RealPhysicalArrayLike,
 )
 from quantax.core.unit import EMPTY_UNIT, Unit
 from quantax.core.utils import (
@@ -162,25 +161,25 @@ class Unitful(TreeClass):
             " implemented, just the internals of Unitful should not changed this way."
         )
 
-    # def astype(self, *args, **kwargs) -> "Unitful":
-    #     from quantax.functional.numpy import astype
+        # def astype(self, *args, **kwargs) -> "Unitful":
+        #     from quantax.functional.numpy import astype
 
-    #     return astype(self, *args, **kwargs)
+        #     return astype(self, *args, **kwargs)
 
-    # def squeeze(
-    #     self,
-    #     axis: int | None = None,
-    # ) -> "Unitful":
-    #     from quantax.functional.numpy import squeeze
+        # def squeeze(
+        #     self,
+        #     axis: int | None = None,
+        # ) -> "Unitful":
+        #     from quantax.functional.numpy import squeeze
 
-    #     return squeeze(self, axis)
+        #     return squeeze(self, axis)
 
-    # def reshape(
-    #     self,
-    #     *args,
-    #     **kwargs,
-    # ) -> "Unitful":
-    #     from quantax.functional.numpy import reshape
+        # def reshape(
+        #     self,
+        #     *args,
+        #     **kwargs,
+        # ) -> "Unitful":
+        #     from quantax.functional.numpy import reshape
 
         return reshape(self, args, **kwargs)
 
@@ -242,33 +241,33 @@ class Unitful(TreeClass):
 
         return subtract(other, self)
 
-    # def __lt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-    #     from quantax.functional.numpy import lt
+        # def __lt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        #     from quantax.functional.numpy import lt
 
-    #     return lt(self, other)
+        #     return lt(self, other)
 
-    # def __le__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-    #     from quantax.functional.numpy import le
+        # def __le__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        #     from quantax.functional.numpy import le
 
-    #     return le(self, other)
+        #     return le(self, other)
 
-    # def __eq__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]
-    #     from quantax.functional.numpy import eq
+        # def __eq__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]
+        #     from quantax.functional.numpy import eq
 
-    #     return eq(self, other)
+        #     return eq(self, other)
 
-    # def __ne__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]  # allow non-bool return for array-style comparison
-    #     from quantax.functional.numpy import ne
+        # def __ne__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":  # type: ignore[override]  # allow non-bool return for array-style comparison
+        #     from quantax.functional.numpy import ne
 
-    #     return ne(self, other)
+        #     return ne(self, other)
 
-    # def __ge__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-    #     from quantax.functional.numpy import ge
+        # def __ge__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        #     from quantax.functional.numpy import ge
 
-    #     return ge(self, other)
+        #     return ge(self, other)
 
-    # def __gt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
-    #     from quantax.functional.numpy import gt
+        # def __gt__(self, other: "Unitful | RealPhysicalArrayLike") -> "Unitful":
+        #     from quantax.functional.numpy import gt
 
         return gt(self, other)
 

@@ -1,4 +1,3 @@
-from quantax.unitful.utils import check_jax_unitful_tracer_type
 from typing import Callable, TypeVar
 
 import jax
@@ -6,6 +5,7 @@ import numpy as np
 from typing_extensions import TypeVarTuple, Unpack
 
 from quantax.unitful.unitful import Unitful
+from quantax.unitful.utils import check_jax_unitful_tracer_type
 
 Ts = TypeVarTuple("Ts")
 R = TypeVar("R")

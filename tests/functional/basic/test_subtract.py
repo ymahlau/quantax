@@ -1,5 +1,3 @@
-from quantax.core.unit import Unit
-from quantax.functional import jit
 import math
 
 import jax
@@ -8,9 +6,11 @@ import numpy as np
 import pytest
 
 from quantax.core.typing import SI
+from quantax.core.unit import Unit
+from quantax.functional import jit
 from quantax.functional.numpy.basic import subtract
 from quantax.unitful.unitful import Unitful
-from quantax.units import Hz, ms, s, m
+from quantax.units import Hz, ms, s
 
 
 def test_subtract_unitful_same_unit_same_scale():
@@ -26,8 +26,8 @@ def test_subtract_unitful_same_unit_same_scale():
 
 def test_subtract_unitful_same_unit_different_scales():
     """Test subtraction of two Unitful objects with same unit but different scales"""
-    a = 1 * s     # scale 0, value = 1
-    b = 1 * ms    # scale -3, value = 0.001
+    a = 1 * s  # scale 0, value = 1
+    b = 1 * ms  # scale -3, value = 0.001
 
     result = subtract(a, b)
 
@@ -149,6 +149,7 @@ _w = Unitful(val=1.0, unit=Unit({SI.s: 1}), scale=0)
 def _sub_fn(x: Unitful, y: Unitful):
     def _inner(a):
         return subtract(a, _w)  # _w captured as closure
+
     mid = subtract(x, y)
     out = jit(_inner)(mid)
     return out
@@ -160,4 +161,4 @@ def test_complicated_subtract_fn():
     res = jit(_sub_fn)(x, y)
     res_no_jit = _sub_fn(x, y)
     scale_diff = res.scale - res_no_jit.scale
-    assert jnp.allclose(res.val, res_no_jit.val * (10 ** scale_diff))
+    assert jnp.allclose(res.val, res_no_jit.val * (10**scale_diff))

@@ -1,16 +1,15 @@
-from quantax.core.unit import Unit
-from quantax.functional import jit
 import math
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from quantax.core.typing import SI
+from quantax.core.unit import Unit
+from quantax.functional import jit
 from quantax.functional.numpy.basic import divide
 from quantax.unitful.unitful import Unitful
-from quantax.units import Hz, ms, s, m
+from quantax.units import Hz, m, ms, s
 
 
 def test_divide_unitful_same_unit():
@@ -37,8 +36,8 @@ def test_divide_unitful_different_units():
 
 def test_divide_unitful_different_scales():
     """Test division of Unitful objects with different scales"""
-    a = 6 * s    # scale 0
-    b = 2 * ms   # scale -3
+    a = 6 * s  # scale 0
+    b = 2 * ms  # scale -3
 
     result = divide(a, b)
 
@@ -173,6 +172,7 @@ _w_dimensionless = Unitful(val=2.0)
 def _div_fn(x: Unitful, y: Unitful):
     def _inner(a):
         return divide(a, _w_dimensionless)  # _w captured as closure
+
     mid = divide(x, y)
     out = jit(_inner)(mid)
     return out
@@ -184,4 +184,4 @@ def test_complicated_divide_fn():
     res = jit(_div_fn)(x, y)
     res_no_jit = _div_fn(x, y)
     scale_diff = res.scale - res_no_jit.scale
-    assert jnp.allclose(res.val, res_no_jit.val * (10 ** scale_diff))
+    assert jnp.allclose(res.val, res_no_jit.val * (10**scale_diff))
