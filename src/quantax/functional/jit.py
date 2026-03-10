@@ -49,8 +49,7 @@ class JitTransformNode(FunctionTransformNode):
             trace_result=self.output,
         )
 
-        orig_jit = get_jit_original()
-        result = orig_jit(replay_fn, **self.jit_kwargs)(*args, *kwargs)
+        result = get_jit_original()(replay_fn, **self.jit_kwargs)(*args, **kwargs)
 
         return result
 
@@ -96,6 +95,23 @@ def convert_to_jax(data):
     return converted_data
 
 
+def _trace_node(node: FunctionTransformNode, fn: Callable, fn_args, fn_kwargs):
+    op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
+    node.op_kwargs = op_kwargs
+    node.trace_args = fn_args
+    node.trace_kwargs = fn_kwargs
+    with node_context(node):
+        trace_result = trace_fn(
+            fn=fn,
+            fn_transform_node=node,
+            fn_args=fn_args,
+            fn_kwargs=fn_kwargs,
+            input_tracer_list=list(op_kwargs.values()),
+        )
+    node.output = trace_result
+    return trace_result
+
+
 class UnitfulJitWrapped:
     def __init__(
         self,
@@ -129,21 +145,7 @@ class UnitfulJitWrapped:
             with global_trace_context() as global_data:
                 fn_args = convert_to_tracer(args)
                 fn_kwargs = convert_to_tracer(kwargs)
-                op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
-                node.op_kwargs = op_kwargs
-                node.trace_args = fn_args
-                node.trace_kwargs = fn_kwargs
-
-                with node_context(node):
-                    trace_result = trace_fn(
-                        fn=self.fun,
-                        fn_transform_node=node,
-                        fn_args=fn_args,
-                        fn_kwargs=fn_kwargs,
-                        input_tracer_list=list(op_kwargs.values()),
-                    )
-
-                node.output = trace_result
+                trace_result = _trace_node(node, self.fun, fn_args, fn_kwargs)
 
             # global_data still valid here (object persists after context exit)
             global_data.fn_transform_nodes[node.id] = node
@@ -151,21 +153,7 @@ class UnitfulJitWrapped:
             register_node_pointer(node)
             fn_args = args
             fn_kwargs = kwargs
-            op_kwargs = parse_arg_kwargs(fn_args, fn_kwargs)
-            node.op_kwargs = op_kwargs
-            node.trace_args = fn_args
-            node.trace_kwargs = fn_kwargs
-
-            with node_context(node):
-                trace_result = trace_fn(
-                    fn=self.fun,
-                    fn_transform_node=node,
-                    fn_args=fn_args,
-                    fn_kwargs=fn_kwargs,
-                    input_tracer_list=list(op_kwargs.values()),
-                )
-
-            node.output = trace_result
+            trace_result = _trace_node(node, self.fun, fn_args, fn_kwargs)
             result_leaves = jax.tree.leaves(trace_result, is_leaf=lambda x: isinstance(x, UnitfulTracer))
             register_tracer_for_current_context(result_leaves)
             register_node_input_output(node)
@@ -180,13 +168,10 @@ class UnitfulJitWrapped:
         )
 
         # compute topological ordering for every node
-        data_dict: dict[int, list[GraphData]] = {}
-        for n in global_data.fn_transform_nodes.values():
-            cur_list = []
-            for td in n.fn_tracers:
-                graph_data = create_graph_from_trace(td)
-                cur_list.append(graph_data)
-            data_dict[n.id] = cur_list
+        data_dict = {
+            n.id: [create_graph_from_trace(td) for td in n.fn_tracers]
+            for n in global_data.fn_transform_nodes.values()
+        }
 
         # replay the function
         global_replay_data = GlobalReplayData(
