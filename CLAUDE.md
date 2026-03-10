@@ -23,6 +23,9 @@ uv run ruff check --fix src/
 
 # Format
 uv run ruff format src/
+
+# Pre-commit checks
+uv run pre-commit run --all
 ```
 
 ## Architecture
@@ -53,16 +56,30 @@ uv run ruff format src/
 - **`src/quantax/functional/collection.py`**: Registry mapping operation names to their implementation functions (`FUNCTION_DICT`) and constraint generators (`CONSTRAINTS_DICT`).
 - **`src/quantax/functional/patching.py`**: `patch_all_functions_jax()` monkey-patches `jax.numpy` and `jax.lax` with Unitful-aware versions (currently only `multiply` is active; others are commented out).
 
-### Adding a new operation
+### Adding a new basic operation
+
+Basic operations (e.g. `multiply`, `add`) live in `src/quantax/functional/numpy/basic.py`. Use `multiply` (`basic.py:21–167`) as reference.
 
 Each operation needs:
-1. An implementation function in `src/quantax/functional/numpy/` (or similar) that handles both eager `Unitful` and tracer `UnitfulTracer` cases.
-2. A `constraints_*` function that returns OR-Tools `BoundedLinearExpression` constraints relating input and output scale variables.
-3. Registration in `src/quantax/functional/collection.py` in both `CONSTRAINTS_DICT` and `FUNCTION_DICT`.
+1. `constraints_<name>()` — OR-Tools constraints relating input/output scale variables. Scale constraint reference:
+   - `multiply`: `x + y == out`
+   - `add` / `subtract`: `x == out` and `y == out`
+   - `divide`: `x - y == out`
+2. `get_<name>_original()` — returns the unpatched JAX function (checks `jax.numpy._orig_<name>` first).
+3. `<name>()` — implementation dispatching on `Unitful`, `UnitfulTracer`, and plain array types.
+4. `@overload` signatures for all meaningful type combinations.
+5. Export from `src/quantax/functional/__init__.py`.
+6. Register in `src/quantax/functional/collection.py` in `CONSTRAINTS_DICT`, `FUNCTION_DICT`, and `ORIG_FUNCTION_DICT`.
+7. Register in `src/quantax/functional/patching.py` under `_full_patch_list_numpy` (or `_full_patch_list_lax` / `_full_patch_list_linalg`).
+8. Write tests in `tests/functional/basic/test_<name>.py` covering: eager, scale handling, type preservation, mixed-type, plain array fallback, jitted. Add to `BINARY_FNS` in `tests/functional/test_binary_functions.py` if applicable.
+
+### Adding a function transform
+
+Function transforms (e.g. `jit`, `cond`, `grad`) use a `FunctionTransformNode` subclass — **not** `OperatorNode`. They are **only** registered in `patching.py` (not in `collection.py`). See `src/quantax/functional/jit.py` as reference.
 
 ### Function transformations (jit, cond, grad, etc.)
 
-Each JAX function transformation is represented as a `FunctionTransformNode` subclass. These nodes maintain local `TraceData` (not added to the global graph directly) and communicate with the global graph via equality no-op constraints on inputs/outputs. This enables handling cycles (e.g. `while` loops). Nested transforms build a tree of nodes that are replayed recursively.
+Each JAX function transformation is represented as a `FunctionTransformNode` subclass. These nodes maintain local `TraceData` and communicate with the global graph via equality no-op constraints on inputs/outputs, enabling nested transforms and cycle handling. Replayed recursively.
 
 ## Dependencies
 
