@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from quantax import Unitful
+from quantax.unitful.unitful import Unitful
 from quantax.core.utils import handle_different_scales
 from quantax.unitful.unitful import can_optimize_scale
 
@@ -13,10 +13,10 @@ def align_scales(
         raise Exception("Cannot align arrays with different units")
     # non physical ArrayLikes need to keep scale 0
     force_zero_scale = False
-    if not u1.optimize_scale or not can_optimize_scale(u1):
+    if not can_optimize_scale(u1):
         assert u1.scale == 0
         force_zero_scale = True
-    if not u2.optimize_scale or not can_optimize_scale(u2):
+    if not can_optimize_scale(u2):
         assert u2.scale == 0
         force_zero_scale = True
     # calculate new scale

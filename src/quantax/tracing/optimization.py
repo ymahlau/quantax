@@ -6,31 +6,28 @@ import jax
 import jax.numpy as jnp
 from ortools.math_opt.python import mathopt
 
-from quantax.core.glob import GlobalTraceData, ScaleAssignment
+from quantax.tracing.glob import GlobalTraceData, ScaleAssignment
 from quantax.functional.collection import CONSTRAINTS_DICT
-from quantax.unitful.tracer import UnitfulTracer
+from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 _ROUND_EPS = 1e-12
 
 
 def solve_scale_assignment(
-    trace_args,
-    trace_kwargs,
-    trace_output,
-    trace_data: GlobalTraceData,
+    global_data: GlobalTraceData,
 ) -> ScaleAssignment:
     model = mathopt.Model(name="Scale_Optimization")
-    var_ops_dict, var_tracer_dict = collect_variables(model, trace_data)
+    var_ops_dict, var_tracer_dict = collect_variables(model, global_data)
 
     add_input_constraints(
         model=model,
-        trace_data=trace_data,
+        global_data=global_data,
         var_tracer_dict=var_tracer_dict,
     )
     add_operator_constraints(
         model=model,
-        trace_data=trace_data,
+        global_data=global_data,
         var_ops_dict=var_ops_dict,
         var_tracer_dict=var_tracer_dict,
     )
@@ -113,10 +110,10 @@ def collect_variables(
 
 def add_input_constraints(
     model: mathopt.Model,
-    trace_data: GlobalTraceData,
+    global_data: GlobalTraceData,
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
-    for t in trace_data.tracer_nodes.values():
+    for t in global_data.tracer_nodes.values():
         if t.unit is None:
             # non-unitful do not have a scale
             continue
@@ -139,11 +136,11 @@ def add_input_constraints(
 
 def add_operator_constraints(
     model: mathopt.Model,
-    trace_data: GlobalTraceData,
+    global_data: GlobalTraceData,
     var_ops_dict: dict[tuple[str, int, int], mathopt.Variable],
     var_tracer_dict: dict[int, tuple[mathopt.Variable, mathopt.Variable]],
 ):
-    for n in trace_data.pure_operator_nodes.values():
+    for n in global_data.pure_operator_nodes.values():
         # TODO: handle non-traced inputs
         # Operator input variables
         c_kwargs = {}

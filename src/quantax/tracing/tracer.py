@@ -6,7 +6,7 @@ from typing import Any, get_args
 import jax
 import numpy as np
 
-from quantax.core.glob import register_tracer
+from quantax.tracing.glob import register_tracer
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 from quantax.unitful.unitful import Unitful

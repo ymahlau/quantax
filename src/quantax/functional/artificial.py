@@ -6,16 +6,20 @@ import jax
 import numpy as np
 from ortools.math_opt.python import mathopt
 
-from quantax.core.glob import OperatorNode, register_node_full
-from quantax.unitful.tracer import UnitfulTracer
-from quantax.unitful.types import AnyUnitType
+from quantax.tracing.glob import OperatorNode, register_node_full
+from quantax.tracing.tracer import UnitfulTracer
+from quantax.tracing.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
 
 
 def constraints_noop(
-    x: mathopt.Variable,
-    out: Any,
+    x: mathopt.Variable | None,
+    out: Any | None,
 ) -> list[mathopt.BoundedLinearExpression]:
+    if out is None:
+        assert x is None
+        return []
+    assert x is not None
     assert isinstance(out, (mathopt.Variable, mathopt.LinearSum))
     return [x == out]
 

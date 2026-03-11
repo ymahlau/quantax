@@ -6,7 +6,7 @@ from typing import Any, Callable, get_args
 import jax
 import jax.numpy as jnp
 
-from quantax.core.glob import (
+from quantax.tracing.glob import (
     FunctionTransformNode,
     GlobalReplayData,
     get_current_node,
@@ -20,13 +20,11 @@ from quantax.core.glob import (
 )
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike
 from quantax.core.utils import get_all_closure_vars
-from quantax.functional.utils import parse_arg_kwargs, trace_fn
 from quantax.tracing.graph import create_graph_from_trace
 from quantax.tracing.optimization import solve_scale_assignment
 from quantax.tracing.replay import get_replay_function
-from quantax.unitful.tracer import UnitfulTracer
+from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
-from quantax.unitful.utils import check_jax_unitful_tracer_type, get_static_operand
 
 
 @dataclass(kw_only=True)
@@ -54,37 +52,7 @@ class JitTransformNode(FunctionTransformNode):
         return result
 
 
-def convert_to_tracer(data):
-    """
-    Converts given pytree to tracers
-    """
 
-    def _conversion_helper(x: AnyArrayLike | Unitful) -> UnitfulTracer:
-        if isinstance(x, get_args(ShapedArrayLike)):
-            sd = jax.ShapeDtypeStruct(shape=x.shape, dtype=x.dtype)
-        else:
-            sd = None
-
-        static_unitful = get_static_operand(x)
-        return UnitfulTracer(
-            unit=x.unit if isinstance(x, Unitful) else None,
-            val_shape_dtype=sd,
-            static_unitful=static_unitful,
-            value=x,
-        )
-
-    # IMPORTANT: we cannot use parallel tree_map here, because Tracer creation is linked to global list with an id.
-    # race conditions may occur
-    leaves, treedef = jax.tree.flatten(tree=data, is_leaf=lambda x: isinstance(x, Unitful))
-    converted_leaves = []
-    for leaf in leaves:
-        if isinstance(leaf, tuple(list(get_args(AnyArrayLike)) + [Unitful])):
-            converted_leaves.append(_conversion_helper(leaf))
-        else:
-            converted_leaves.append(leaf)
-    converted_data = jax.tree.unflatten(treedef, converted_leaves)
-
-    return converted_data
 
 
 def convert_to_jax(data):
@@ -126,11 +94,12 @@ class UnitfulJitWrapped:
         kwargs = convert_to_jax(kwargs)
 
         # do we have any untifuls in the computation involved
-        _, has_unitful, has_tracer = check_jax_unitful_tracer_type(data=(args, kwargs, get_all_closure_vars(self.fun)))
+        data = (args, kwargs, get_all_closure_vars(self.fun))
+        _, has_unitful, has_tracer = check_jax_unitful_tracer_type(data)
 
         # if only standard jax arrays are involved, run standard jit
         if not has_unitful:
-            return get_jit_original()(self.fun)(*args, **kwargs)
+            return get_jit_original()(self.fun, **self.jit_kwargs)(*args, **kwargs)
 
         node = JitTransformNode(
             op_name="jit",
@@ -161,15 +130,13 @@ class UnitfulJitWrapped:
 
         # if this was outermost jit, we are done tracing; optimize unitful scale assignment
         scale_assignment = solve_scale_assignment(
-            trace_args=fn_args,
-            trace_kwargs=fn_kwargs,
-            trace_output=trace_result,
-            trace_data=global_data,
+            global_data=global_data,
         )
 
         # compute topological ordering for every node
         data_dict = {
-            n.id: [create_graph_from_trace(td) for td in n.fn_tracers] for n in global_data.fn_transform_nodes.values()
+            n.id: [create_graph_from_trace(td) for td in n.fn_tracers] 
+            for n in global_data.fn_transform_nodes.values()
         }
 
         # replay the function

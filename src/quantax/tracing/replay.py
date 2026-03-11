@@ -4,11 +4,11 @@ from typing import Any, Callable
 
 import jax
 
-from quantax.core.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
+from quantax.tracing.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
 from quantax.core.typing import AnyArrayLike
 from quantax.functional.collection import FUNCTION_DICT
 from quantax.tracing.graph import GraphData
-from quantax.unitful.tracer import UnitfulTracer
+from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 

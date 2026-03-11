@@ -31,6 +31,9 @@ class Unitful(TreeClass):
     unit: Unit = frozen_field(default=EMPTY_UNIT)
     scale: int = frozen_field(default=0)
     optimize_scale: bool = frozen_field(default=True)
+    
+    # Tell NumPy that this class takes priority in operations
+    __array_priority__ = 1000
 
     def _validate(self):
         bad_dtype = isinstance(self.val, (jax.Array, np.ndarray, np.number)) and self.dtype not in PHYSICAL_DTYPES
@@ -45,6 +48,9 @@ class Unitful(TreeClass):
 
     def __post_init__(self):
         self._validate()
+        # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
+        if glob.get_global_replay_data() is not None:
+            self.optimize_scale = False
         if not self.optimize_scale or not can_optimize_scale(self):
             return
         if not is_traced(self.val):
@@ -118,7 +124,7 @@ class Unitful(TreeClass):
 
     @property
     def dtype(self):
-        if isinstance(self.val, (int, float, complex, bool)):
+        if not hasattr(self.val, "dtype"):
             raise Exception("Python scalar does not have dtype attribute")
         return self.val.dtype
 
@@ -286,9 +292,6 @@ class Unitful(TreeClass):
 
 
 def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
-    # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
-    if glob.get_global_replay_data() is not None:
-        return False
     v = obj.val if isinstance(obj, Unitful) else obj
     if isinstance(v, get_args(NonPhysicalArrayLike)):
         return False

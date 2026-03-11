@@ -1,4 +1,6 @@
 from __future__ import annotations
+from quantax.tracing.utils import convert_input, get_static_operand
+from quantax.unitful.utils import get_shape_dtype
 
 from typing import Any, get_args, overload
 
@@ -6,15 +8,15 @@ import jax
 import numpy as np
 from ortools.math_opt.python import mathopt
 
-from quantax.core.glob import OperatorNode, register_node_full
+from quantax.tracing.glob import OperatorNode, register_node_full
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 from quantax.core.utils import (
     dim_after_multiplication,
     handle_different_scales,
 )
-from quantax.unitful.tracer import UnitfulTracer
-from quantax.unitful.types import AnyUnitType
+from quantax.tracing.tracer import UnitfulTracer
+from quantax.tracing.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
 
 
@@ -112,8 +114,11 @@ def multiply(x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 
 
 def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
+    x = convert_input(x)
+    y = convert_input(y)
+    
     # Unitful handling
-    def _mul_unitful(x: Unitful, y: Unitful):
+    def _mul_unitful(x: Unitful, y: Unitful) -> Unitful:
         new_unit = dim_after_multiplication(x.unit, y.unit)
         assert new_unit is not None
         new_val = x.val * y.val
@@ -134,7 +139,7 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         new_unit = dim_after_multiplication(x.unit, y.unit)
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful * y.static_unitful
+            new_static_unitful = _mul_unitful(x.static_unitful, y.static_unitful)
         result = UnitfulTracer(unit=new_unit, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="multiply",
@@ -148,15 +153,21 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         return _mul_tracer(x, y)
     if isinstance(x, UnitfulTracer):
         assert isinstance(y, StaticArrayLike | Unitful)
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
+        y_tracer = UnitfulTracer(
+            unit=None if not isinstance(y, Unitful) else y.unit, 
+            static_unitful=get_static_operand(y), 
+            value=y, 
+            val_shape_dtype=get_shape_dtype(y),
+        )
         return _mul_tracer(x, y_tracer)
     if isinstance(y, UnitfulTracer):
         assert isinstance(x, StaticArrayLike | Unitful)
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
+        x_tracer = UnitfulTracer(
+            unit=None if not isinstance(x, Unitful) else x.unit, 
+            static_unitful=get_static_operand(x), 
+            value=x, 
+            val_shape_dtype=get_shape_dtype(x),
+        )
         return _mul_tracer(x_tracer, y)
 
     # any other array-like

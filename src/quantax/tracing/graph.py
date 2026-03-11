@@ -1,18 +1,19 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 import rustworkx
 from rustworkx import PyDiGraph
 from rustworkx.visualization import mpl_draw
 
-from quantax.core.glob import GraphData, OperatorNode, TraceData
-from quantax.unitful.tracer import UnitfulTracer
+from quantax.tracing.nodes import OperatorNode, TraceData, GraphData
+from quantax.tracing.tracer import UnitfulTracer
 
 
 def create_graph_from_trace(
     trace_data: TraceData,
 ) -> GraphData:
     num_nodes = len(trace_data)
-    num_edges = len(trace_data.node_in_edges) + len(trace_data.node_out_edges)
+    num_edges = len(trace_data.op_in_edges) + len(trace_data.op_out_edges)
     graph = PyDiGraph(
         multigraph=False,
         node_count_hint=num_nodes + 1,
@@ -22,7 +23,7 @@ def create_graph_from_trace(
     graph_idx_to_node_id: dict[int, int] = {i: n.id for (i, n) in zip(node_indices, trace_data.nodes)}
     node_id_to_graph_idx: dict[int, int] = {n.id: i for (i, n) in zip(node_indices, trace_data.nodes)}
 
-    for parent_id, child_id in trace_data.node_in_edges + trace_data.node_out_edges:
+    for parent_id, child_id in trace_data.op_in_edges + trace_data.op_out_edges:
         graph.add_edge(
             node_id_to_graph_idx[parent_id],
             node_id_to_graph_idx[child_id],
