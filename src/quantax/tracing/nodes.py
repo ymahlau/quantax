@@ -1,12 +1,15 @@
 from __future__ import annotations
-from quantax.core.typing import AnyArrayLike
-from quantax.unitful.unitful import Unitful
-from rustworkx import PyDiGraph
-from abc import abstractmethod, ABC
-import jax
-from typing import Any, ParamSpec, TypeVar, Generic
-from quantax.tracing.tracer import UnitfulTracer
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Any, Generic, ParamSpec, TypeVar
+
+import jax
+from rustworkx import PyDiGraph
+
+from quantax.core.typing import AnyArrayLike
+from quantax.tracing.tracer import UnitfulTracer
+from quantax.unitful.unitful import Unitful
 
 
 @dataclass(kw_only=True)
@@ -34,7 +37,7 @@ class GlobalTraceData:
 
     @property
     def nodes(self) -> list[OperatorNode | UnitfulTracer]:
-        return self.operator_nodes + list(self.tracer_nodes.values()) + list(self.fn_transform_nodes.values())
+        return self.operator_nodes + list(self.tracer_nodes.values())
 
     @property
     def operator_nodes(self) -> list[OperatorNode]:
@@ -43,8 +46,10 @@ class GlobalTraceData:
     def __len__(self) -> int:
         return len(self.pure_operator_nodes) + len(self.tracer_nodes) + len(self.fn_transform_nodes)
 
+
 P = ParamSpec("P")
 R = TypeVar("R")
+
 
 @dataclass(kw_only=True)
 class TraceData(Generic[P, R]):
@@ -89,7 +94,8 @@ class OperatorNode:
 
 @dataclass(kw_only=True)
 class FunctionTransformNode(OperatorNode, ABC):
-    fn_tracers: list[TraceData] = field(default_factory=list)
+    fn_trace_data: list[TraceData] = field(default_factory=list)
+    op_kwargs: dict[str, UnitfulTracer]
     parent: FunctionTransformNode | None
     trace_args: Any = field(default=None)
     trace_kwargs: dict[str, Any] = field(default_factory=dict)

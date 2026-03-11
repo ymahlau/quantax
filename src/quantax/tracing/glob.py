@@ -1,18 +1,19 @@
 from __future__ import annotations
-from quantax.tracing.nodes import FunctionTransformNode, GlobalTraceData, TraceData, GlobalReplayData, ScaleAssignment, OperatorNode
 
-from abc import abstractmethod
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from quantax.tracing.graph import create_graph_from_trace
 import jax
-from rustworkx import PyDiGraph
 
-from quantax.core.typing import AnyArrayLike
-from quantax.unitful.unitful import Unitful
+from quantax.tracing.nodes import (
+    FunctionTransformNode,
+    GlobalReplayData,
+    GlobalTraceData,
+    OperatorNode,
+    ScaleAssignment,
+    TraceData,
+)
 
 if TYPE_CHECKING:
     from quantax.tracing.tracer import UnitfulTracer
@@ -62,8 +63,8 @@ def fn_trace_context():
 
 
 @contextmanager
-def node_context(new_node: FunctionTransformNode):
-    token = _current_node.set(new_node)
+def node_context(node: FunctionTransformNode):
+    token = _current_node.set(node)
     try:
         yield
     finally:
@@ -85,7 +86,7 @@ def replay_context(
         scale_assignment=scale_assignment,
     )
     token = _global_replay_data.set(global_replay_data)
-    
+
     try:
         yield
     finally:
@@ -120,7 +121,7 @@ def register_node_pointer(node: OperatorNode) -> None:
 def register_node_input(node: OperatorNode):
     global_td = get_global_trace_data()
     current_td = get_current_trace_data()
-    
+
     for t in node.op_kwargs.values():
         if current_td is not None:
             current_td.op_in_edges.append((t.id, node.id))
@@ -134,7 +135,7 @@ def register_node_output(node: OperatorNode):
     global_td = get_global_trace_data()
     current_td = get_current_trace_data()
     trace_leaves = jax.tree.leaves(node.output)
-    
+
     for t in trace_leaves:
         if current_td is not None:
             current_td.op_out_edges.append((node.id, t.id))

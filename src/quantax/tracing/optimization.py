@@ -6,8 +6,8 @@ import jax
 import jax.numpy as jnp
 from ortools.math_opt.python import mathopt
 
-from quantax.tracing.glob import GlobalTraceData, ScaleAssignment
 from quantax.functional.collection import CONSTRAINTS_DICT
+from quantax.tracing.glob import GlobalTraceData, ScaleAssignment
 from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 

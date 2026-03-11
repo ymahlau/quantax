@@ -1,25 +1,24 @@
 from __future__ import annotations
-from quantax.tracing.nodes import TraceData
 
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Callable, ParamSpec, TypeVar
 
 import jax
 
-from quantax.tracing.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
 from quantax.core.typing import AnyArrayLike
 from quantax.functional.collection import FUNCTION_DICT
-from quantax.tracing.graph import GraphData, create_graph_from_trace
+from quantax.tracing.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
+from quantax.tracing.graph import create_graph_from_trace
+from quantax.tracing.nodes import TraceData
 from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
-def get_replay_function(
-    trace_data: TraceData[P, R]
-) -> Callable[P, R]:
+
+def get_replay_function(trace_data: TraceData[P, R]) -> Callable[P, R]:
     graph_data = create_graph_from_trace(trace_data)
-    
+
     args_trace_leaves, args_trace_treedef = jax.tree.flatten(
         tree=trace_data.trace_args, is_leaf=lambda x: isinstance(x, UnitfulTracer)
     )
@@ -201,10 +200,9 @@ def get_replay_function(
 
                     assert tl.id not in local_value_dict, "internal error, please report"
                     local_value_dict[tl.id] = rl
-                    # if node was function transform, then it will already have registered the output tracer in the
+                    # if node was function transform, then it may already have registered the output tracer in the
                     # global dictionary
-                    if not isinstance(cur_node, FunctionTransformNode):
-                        assert tl.id not in global_value_dict, "internal error, please report"
+                    if tl.id not in global_value_dict:
                         global_value_dict[tl.id] = rl
             else:
                 raise Exception(f"invalid node type: {cur_node}")

@@ -1,17 +1,18 @@
 from __future__ import annotations
-from quantax.tracing.tracer import UnitfulTracer
-from quantax.unitful.alignment import align_scales
-from quantax.tracing.glob import OperatorNode, register_node_full
-from quantax.tracing.types import AnyUnitType
 
-from typing import get_args, overload, Any
-from ortools.math_opt.python import mathopt
+from typing import Any, overload
 
 import jax
 import numpy as np
+from ortools.math_opt.python import mathopt
 
-from quantax.core.typing import AnyArrayLike, StaticArrayLike
-from quantax.core.utils import handle_different_scales
+from quantax.core.typing import AnyArrayLike
+from quantax.core.unit import EMPTY_UNIT
+from quantax.functional.utils import binary_op_from_func
+from quantax.tracing.glob import OperatorNode, register_node_full
+from quantax.tracing.tracer import UnitfulTracer
+from quantax.tracing.types import AnyUnitType
+from quantax.unitful.alignment import align_scales
 from quantax.unitful.unitful import Unitful
 
 
@@ -20,9 +21,9 @@ def constraints_comparison(
     y: mathopt.Variable | None,
     out: Any | None,
 ) -> list[mathopt.BoundedLinearExpression]:
-    assert out is None
+    assert isinstance(out, mathopt.LinearSum)
     assert x is not None and y is not None
-    return [x == y]  # ty:ignore[invalid-return-type]
+    return [x == y, out == 0]  # ty:ignore[invalid-return-type]
 
 
 ## Equal ###########################
@@ -108,24 +109,15 @@ def eq(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # Equality results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _eq_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _eq_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _eq_unitful(x_unitful, y)
-
     # Tracer handling
     def _eq_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for equality: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful == y.static_unitful
-        
+            new_static_unitful = _eq_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="eq",
             op_kwargs={"x": x, "y": y},
@@ -134,25 +126,13 @@ def eq(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _eq_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _eq_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _eq_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for equals: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for equals: {y}"
-    result = x == y
+    result = binary_op_from_func(
+        unitful_handler=_eq_unitful,
+        tracer_handler=_eq_tracer,
+        standard_handler=lambda x, y: x == y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -233,31 +213,22 @@ def ne(x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 
 def ne(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
     # Unitful handling
-    def _neq_unitful(x: Unitful, y: Unitful):
+    def _ne_unitful(x: Unitful, y: Unitful):
         x_align, y_align = align_scales(x, y)
         # Note: using the aligned values instead of the raw x.val != y.val
         new_val = x_align.val != y_align.val
         # Inequality results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _neq_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _neq_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _neq_unitful(x_unitful, y)
-
     # Tracer handling
-    def _neq_tracer(x: UnitfulTracer, y: UnitfulTracer):
+    def _ne_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for inequality: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful != y.static_unitful
-        
+            new_static_unitful = _ne_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="neq",
             op_kwargs={"x": x, "y": y},
@@ -266,25 +237,13 @@ def ne(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _neq_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _neq_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _neq_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for not equals: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for not equals: {y}"
-    result = x != y
+    result = binary_op_from_func(
+        unitful_handler=_ne_unitful,
+        tracer_handler=_ne_tracer,
+        standard_handler=lambda x, y: x != y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -366,24 +325,15 @@ def lt(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # Less than results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _lt_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _lt_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _lt_unitful(x_unitful, y)
-
     # Tracer handling
     def _lt_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for less than: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful < y.static_unitful
-        
+            new_static_unitful = _lt_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="lt",
             op_kwargs={"x": x, "y": y},
@@ -392,25 +342,13 @@ def lt(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _lt_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _lt_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _lt_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for less than: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for less than: {y}"
-    result = x < y
+    result = binary_op_from_func(
+        unitful_handler=_lt_unitful,
+        tracer_handler=_lt_tracer,
+        standard_handler=lambda x, y: x < y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -492,24 +430,15 @@ def le(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # Comparison results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _le_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _le_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _le_unitful(x_unitful, y)
-
     # Tracer handling
     def _le_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for less than or equal: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful <= y.static_unitful
-        
+            new_static_unitful = _le_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="le",
             op_kwargs={"x": x, "y": y},
@@ -518,25 +447,13 @@ def le(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _le_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _le_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _le_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for less than or equal: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for less than or equal: {y}"
-    result = x <= y
+    result = binary_op_from_func(
+        unitful_handler=_le_unitful,
+        tracer_handler=_le_tracer,
+        standard_handler=lambda x, y: x <= y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -618,24 +535,15 @@ def gt(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # Greater than results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _gt_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _gt_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _gt_unitful(x_unitful, y)
-
     # Tracer handling
     def _gt_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for greater than: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful > y.static_unitful
-        
+            new_static_unitful = _gt_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="gt",
             op_kwargs={"x": x, "y": y},
@@ -644,25 +552,13 @@ def gt(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _gt_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _gt_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _gt_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for greater than: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for greater than: {y}"
-    result = x > y
+    result = binary_op_from_func(
+        unitful_handler=_gt_unitful,
+        tracer_handler=_gt_tracer,
+        standard_handler=lambda x, y: x > y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -744,24 +640,15 @@ def ge(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # Greater than or equal to results in a dimensionless boolean
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _ge_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _ge_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _ge_unitful(x_unitful, y)
-
     # Tracer handling
     def _ge_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for greater than or equal to: {x.unit} vs {y.unit}"
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful >= y.static_unitful
-        
+            new_static_unitful = _ge_unitful(x.static_unitful, y.static_unitful)
+
         # Output tracer is dimensionless
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="ge",
             op_kwargs={"x": x, "y": y},
@@ -770,25 +657,13 @@ def ge(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _ge_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _ge_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _ge_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for greater than or equal to: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for greater than or equal to: {y}"
-    result = x >= y
+    result = binary_op_from_func(
+        unitful_handler=_ge_unitful,
+        tracer_handler=_ge_tracer,
+        standard_handler=lambda x, y: x >= y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -832,26 +707,17 @@ def array_equal(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         # array_equal results in a dimensionless boolean scalar
         return Unitful(val=new_val)
 
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _array_equal_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful, UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _array_equal_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful, UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _array_equal_unitful(x_unitful, y)
-
     # Tracer handling
     def _array_equal_tracer(x: UnitfulTracer, y: UnitfulTracer):
         assert x.unit == y.unit, f"Unit mismatch for array_equal: {x.unit} vs {y.unit}"
         new_static_unitful = None
-        
+
         if x.static_unitful is not None and y.static_unitful is not None:
             # Recursively call array_equal to compute the static value
             new_static_unitful = array_equal(x.static_unitful, y.static_unitful)
-        
+
         # Output tracer is a dimensionless scalar
-        result = UnitfulTracer(unit=None, static_unitful=new_static_unitful)
+        result = UnitfulTracer(unit=EMPTY_UNIT, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="array_equal",
             op_kwargs={"x": x, "y": y},
@@ -860,26 +726,18 @@ def array_equal(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _array_equal_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, (StaticArrayLike, Unitful))
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _array_equal_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, (StaticArrayLike, Unitful))
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _array_equal_tracer(x_tracer, y)
+    def _array_equal_standard(x: AnyArrayLike, y: AnyArrayLike) -> AnyArrayLike:
+        if isinstance(x, jax.Array) or isinstance(y, jax.Array):
+            orig_fn = get_array_equal_original()
+        else:
+            orig_fn = np.array_equal
+        return orig_fn(x, y)
 
-    # Any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for array_equal: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for array_equal: {y}"
-    if isinstance(x, jax.Array) or isinstance(y, jax.Array):
-        orig_fn = get_array_equal_original()
-    else:
-        orig_fn = np.array_equal
-    return orig_fn(x, y)
+    result = binary_op_from_func(
+        unitful_handler=_array_equal_unitful,
+        tracer_handler=_array_equal_tracer,
+        standard_handler=_array_equal_standard,
+        x=x,
+        y=y,
+    )
+    return result

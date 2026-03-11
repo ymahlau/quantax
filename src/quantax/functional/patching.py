@@ -4,12 +4,7 @@ import jax
 from fastcore.foundation import copy_func
 
 from quantax.functional.jit import jit
-from quantax.functional.numpy.basic import (
-    multiply,
-    divide,
-    add,
-    subtract
-)
+from quantax.functional.numpy.basic import add, divide, multiply, subtract
 from quantax.functional.numpy.comparisons import eq, ge, gt, le, lt, ne
 
 

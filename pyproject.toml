@@ -33,7 +33,7 @@ external_types = "typings"
 target-version = "py312"
 line-length = 120
 fix = true
-exclude = ["examples", "slurm", "checks", "docs"]
+exclude = ["examples", "slurm", "checks", "docs", "scripts"]
 
 [tool.ruff.lint]
 extend-select = ["I"]

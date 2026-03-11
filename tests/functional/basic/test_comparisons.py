@@ -5,8 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from quantax.core.typing import SI
-from quantax.functional.numpy.comparisons import eq, ge, gt, le, lt, ne, array_equal
+from quantax.functional.numpy.comparisons import array_equal, eq, ge, gt, le, lt, ne
 from quantax.unitful.unitful import Unitful
 from quantax.units import Hz, ms, s, us
 
@@ -43,9 +42,9 @@ def _expected(fn_name: str, a_val: float, b_val: float) -> bool:
 # ---------------------------------------------------------------------------
 
 _SCALAR_PAIRS = [
-    (2.0, 3.0),   # a < b
-    (3.0, 3.0),   # a == b
-    (4.0, 3.0),   # a > b
+    (2.0, 3.0),  # a < b
+    (3.0, 3.0),  # a == b
+    (4.0, 3.0),  # a > b
 ]
 
 _SCALAR_PAIR_IDS = ["a_lt_b", "a_eq_b", "a_gt_b"]
@@ -65,15 +64,16 @@ def test_same_unit_same_scale_scalar(fn_name, fn, a_val, b_val):
 # 2. Same unit, different scales
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_same_unit_different_scales(fn_name, fn):
     """
     1 s == 1000 ms == 1_000_000 us.
     After scale normalisation all three represent the same physical quantity.
     """
-    one_s  = 1    * s
-    one_ks = 1000 * ms   # same as 1 s
-    half_s = 500  * ms   # 0.5 s  < 1 s
+    one_s = 1 * s
+    one_ks = 1000 * ms  # same as 1 s
+    half_s = 500 * ms  # 0.5 s  < 1 s
 
     # equal pair
     expected_eq = _expected(fn_name, 1.0, 1.0)
@@ -88,18 +88,19 @@ def test_same_unit_different_scales(fn_name, fn):
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_same_unit_three_scales(fn_name, fn):
     """Microsecond scale included – 1 s, 1000 ms, 1_000_000 us must all be equal."""
-    one_s  = 1         * s
-    one_ms = 1_000     * ms
+    one_s = 1 * s
+    one_ms = 1_000 * ms
     one_us = 1_000_000 * us
     expected = _expected(fn_name, 1.0, 1.0)
-    assert bool(fn(one_s,  one_ms)) is expected
+    assert bool(fn(one_s, one_ms)) is expected
     assert bool(fn(one_ms, one_us)) is expected
-    assert bool(fn(one_s,  one_us)) is expected
+    assert bool(fn(one_s, one_us)) is expected
 
 
 # ---------------------------------------------------------------------------
 # 3. Different units must raise ValueError
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_different_units_raises(fn_name, fn):
@@ -111,6 +112,7 @@ def test_different_units_raises(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 4. Python int / float scalar values (Unitful wrapping int & float)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 @pytest.mark.parametrize(
@@ -132,6 +134,7 @@ def test_python_scalar_types(fn_name, fn, a_raw, b_raw):
 # 5. numpy array operands
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_numpy_arrays_elementwise(fn_name, fn):
     """Element-wise comparison of numpy-backed Unitful arrays."""
@@ -148,20 +151,23 @@ def test_numpy_arrays_elementwise(fn_name, fn):
 def test_numpy_arrays_different_scales_elementwise(fn_name, fn):
     """Element-wise comparison of numpy-backed Unitful arrays with mixed scales."""
     # a in seconds, b in milliseconds – scale normalisation must happen
-    a = s  * np.array([1.0, 0.5, 2.0])            # 1 s, 0.5 s, 2 s
-    b = ms * np.array([1000.0, 1000.0, 500.0])     # 1 s, 1 s,   0.5 s
+    a = s * np.array([1.0, 0.5, 2.0])  # 1 s, 0.5 s, 2 s
+    b = ms * np.array([1000.0, 1000.0, 500.0])  # 1 s, 1 s,   0.5 s
     result = fn(a, b)
-    expected = np.array([
-        _expected(fn_name, 1.0, 1.0),
-        _expected(fn_name, 0.5, 1.0),
-        _expected(fn_name, 2.0, 0.5),
-    ])
+    expected = np.array(
+        [
+            _expected(fn_name, 1.0, 1.0),
+            _expected(fn_name, 0.5, 1.0),
+            _expected(fn_name, 2.0, 0.5),
+        ]
+    )
     assert array_equal(result, expected)
 
 
 # ---------------------------------------------------------------------------
 # 6. JAX array operands
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_jax_arrays_elementwise(fn_name, fn):
@@ -177,14 +183,16 @@ def test_jax_arrays_elementwise(fn_name, fn):
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_jax_arrays_different_scales_elementwise(fn_name, fn):
     """Element-wise comparison of JAX-backed Unitful arrays with mixed scales."""
-    a = s  * jnp.array([1.0, 0.5, 2.0])
+    a = s * jnp.array([1.0, 0.5, 2.0])
     b = ms * jnp.array([1000.0, 1000.0, 500.0])
     result = fn(a, b)
-    expected = jnp.array([
-        _expected(fn_name, 1.0, 1.0),
-        _expected(fn_name, 0.5, 1.0),
-        _expected(fn_name, 2.0, 0.5),
-    ])
+    expected = jnp.array(
+        [
+            _expected(fn_name, 1.0, 1.0),
+            _expected(fn_name, 0.5, 1.0),
+            _expected(fn_name, 2.0, 0.5),
+        ]
+    )
     assert array_equal(result, expected)
 
 
@@ -192,11 +200,12 @@ def test_jax_arrays_different_scales_elementwise(fn_name, fn):
 # 7. Mixed backend: JAX array + numpy array (both argument orders)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_mixed_jax_numpy_backend_both_orders(fn_name, fn):
     """Unitful JAX array vs Unitful numpy array – result should be a JAX array."""
-    a = s * jnp.array([1.0, 2.0, 3.0])   # jax-backed
-    b = s * np.array([2.0, 2.0, 2.0])    # numpy-backed
+    a = s * jnp.array([1.0, 2.0, 3.0])  # jax-backed
+    b = s * np.array([2.0, 2.0, 2.0])  # numpy-backed
     expected_r1 = jnp.array([_expected(fn_name, av, bv) for av, bv in zip([1, 2, 3], [2, 2, 2])])
     expected_r2 = jnp.array([_expected(fn_name, bv, av) for av, bv in zip([1, 2, 3], [2, 2, 2])])
 
@@ -213,11 +222,12 @@ def test_mixed_jax_numpy_backend_both_orders(fn_name, fn):
 # 8. Mixed backend: JAX array + Python scalar (both argument orders)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_mixed_jax_python_backend_both_orders(fn_name, fn):
     """Unitful JAX array vs Unitful Python scalar – result should be a JAX array."""
     a = s * jnp.array([1.0, 2.0, 3.0])
-    b = 2 * s   # Python int scalar
+    b = 2 * s  # Python int scalar
 
     r1 = fn(a, b)
     r2 = fn(b, a)
@@ -234,6 +244,7 @@ def test_mixed_jax_python_backend_both_orders(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 9. Mixed backend: numpy array + Python scalar (both argument orders)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_mixed_numpy_python_backend_both_orders(fn_name, fn):
@@ -256,6 +267,7 @@ def test_mixed_numpy_python_backend_both_orders(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 10. numpy scalar (np.generic) operands
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_numpy_scalar_unitful(fn_name, fn):
@@ -294,6 +306,7 @@ def test_numpy_scalar_unitful_vs_jax_array_unitful(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 11. Plain (non-Unitful) fallback path
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 @pytest.mark.parametrize(
@@ -346,6 +359,7 @@ def test_plain_jax_numpy_mixed_fallback_both_orders(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 12. Unitful vs plain (dimensionless) interop
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_unitful_dimensionless_vs_plain_scalar(fn_name, fn):
@@ -403,6 +417,7 @@ def test_magic_method_arrays(fn_name, magic):
 # 14. JIT compilation – all six operators
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_jit_scalar(fn_name, fn):
     """All comparisons survive jax.jit with scalar Unitful operands."""
@@ -426,14 +441,16 @@ def test_jit_array(fn_name, fn):
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_jit_different_scales(fn_name, fn):
     """JIT must still normalise scales before comparing."""
-    a = s  * jnp.array([1.0, 0.5])
-    b = ms * jnp.array([1000.0, 1000.0])   # 1 s, 1 s
+    a = s * jnp.array([1.0, 0.5])
+    b = ms * jnp.array([1000.0, 1000.0])  # 1 s, 1 s
     jitted = jax.jit(fn)
     result = jitted(a, b)
-    expected = jnp.array([
-        _expected(fn_name, 1.0, 1.0),
-        _expected(fn_name, 0.5, 1.0),
-    ])
+    expected = jnp.array(
+        [
+            _expected(fn_name, 1.0, 1.0),
+            _expected(fn_name, 0.5, 1.0),
+        ]
+    )
     assert array_equal(result, expected)
 
 
@@ -450,6 +467,7 @@ def test_jit_reuse(fn_name, fn):
 # ---------------------------------------------------------------------------
 # 15. Edge cases
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("fn_name,fn", CMP_FNS, ids=CMP_FN_IDS)
 def test_zero_values(fn_name, fn):
@@ -486,8 +504,10 @@ def test_2d_array(fn_name, fn):
     a = s * jnp.array([[1.0, 2.0], [3.0, 4.0]])
     b = s * jnp.array([[2.0, 2.0], [2.0, 5.0]])
     result = fn(a, b)
-    expected = jnp.array([
-        [_expected(fn_name, 1.0, 2.0), _expected(fn_name, 2.0, 2.0)],
-        [_expected(fn_name, 3.0, 2.0), _expected(fn_name, 4.0, 5.0)],
-    ])
+    expected = jnp.array(
+        [
+            [_expected(fn_name, 1.0, 2.0), _expected(fn_name, 2.0, 2.0)],
+            [_expected(fn_name, 3.0, 2.0), _expected(fn_name, 4.0, 5.0)],
+        ]
+    )
     assert jnp.array_equal(result, expected)

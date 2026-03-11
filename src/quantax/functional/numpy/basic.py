@@ -1,20 +1,19 @@
 from __future__ import annotations
-from quantax.tracing.utils import convert_input, get_static_operand
-from quantax.unitful.utils import get_shape_dtype
 
-from typing import Any, get_args, overload
+from typing import Any, overload
 
 import jax
 import numpy as np
 from ortools.math_opt.python import mathopt
 
-from quantax.tracing.glob import OperatorNode, register_node_full
-from quantax.core.typing import AnyArrayLike, StaticArrayLike
+from quantax.core.typing import AnyArrayLike
 from quantax.core.unit import Unit
 from quantax.core.utils import (
     dim_after_multiplication,
     handle_different_scales,
 )
+from quantax.functional.utils import binary_op_from_func
+from quantax.tracing.glob import OperatorNode, register_node_full
 from quantax.tracing.tracer import UnitfulTracer
 from quantax.tracing.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
@@ -114,9 +113,6 @@ def multiply(x: np.ndarray, y: np.ndarray) -> np.ndarray: ...
 
 
 def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
-    x = convert_input(x)
-    y = convert_input(y)
-    
     # Unitful handling
     def _mul_unitful(x: Unitful, y: Unitful) -> Unitful:
         new_unit = dim_after_multiplication(x.unit, y.unit)
@@ -124,15 +120,6 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         new_val = x.val * y.val
         new_scale = x.scale + y.scale
         return Unitful(val=new_val, unit=new_unit, scale=new_scale)
-
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _mul_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful | UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _mul_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful | UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _mul_unitful(x_unitful, y)
 
     # Tracer handling
     def _mul_tracer(x: UnitfulTracer, y: UnitfulTracer):
@@ -149,32 +136,13 @@ def multiply(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _mul_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, StaticArrayLike | Unitful)
-        y_tracer = UnitfulTracer(
-            unit=None if not isinstance(y, Unitful) else y.unit, 
-            static_unitful=get_static_operand(y), 
-            value=y, 
-            val_shape_dtype=get_shape_dtype(y),
-        )
-        return _mul_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, StaticArrayLike | Unitful)
-        x_tracer = UnitfulTracer(
-            unit=None if not isinstance(x, Unitful) else x.unit, 
-            static_unitful=get_static_operand(x), 
-            value=x, 
-            val_shape_dtype=get_shape_dtype(x),
-        )
-        return _mul_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for multiply: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for multiply: {y}"
-    result = x * y
-    assert isinstance(result, get_args(AnyArrayLike))
+    result = binary_op_from_func(
+        unitful_handler=_mul_unitful,
+        tracer_handler=_mul_tracer,
+        standard_handler=lambda x, y: x * y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -276,22 +244,13 @@ def add(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
             raise ValueError(f"Cannot add Unitful arrays with different units: {x.unit} vs {y.unit}")
         new_scale, fx, fy = handle_different_scales(x.scale, y.scale)
         new_val = x.val * fx + y.val * fy
-        return Unitful(val=new_val, unit=x.unit, scale=new_scale, optimize_scale=False)
-
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _add_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful | UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _add_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful | UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _add_unitful(x_unitful, y)
+        return Unitful(val=new_val, unit=x.unit, scale=new_scale)
 
     # Tracer handling
     def _add_tracer(x: UnitfulTracer, y: UnitfulTracer):
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful + y.static_unitful
+            new_static_unitful = _add_unitful(x.static_unitful, y.static_unitful)
         result = UnitfulTracer(unit=x.unit, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="add",
@@ -301,26 +260,13 @@ def add(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _add_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, StaticArrayLike | Unitful)
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _add_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, StaticArrayLike | Unitful)
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _add_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for add: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for add: {y}"
-    result = x + y
-    assert isinstance(result, get_args(AnyArrayLike))
+    result = binary_op_from_func(
+        unitful_handler=_add_unitful,
+        tracer_handler=_add_tracer,
+        standard_handler=lambda x, y: x + y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -407,22 +353,13 @@ def subtract(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
             raise ValueError(f"Cannot subtract Unitful arrays with different units: {x.unit} vs {y.unit}")
         new_scale, fx, fy = handle_different_scales(x.scale, y.scale)
         new_val = x.val * fx - y.val * fy
-        return Unitful(val=new_val, unit=x.unit, scale=new_scale, optimize_scale=False)
-
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _sub_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful | UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _sub_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful | UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _sub_unitful(x_unitful, y)
+        return Unitful(val=new_val, unit=x.unit, scale=new_scale)
 
     # Tracer handling
     def _sub_tracer(x: UnitfulTracer, y: UnitfulTracer):
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful - y.static_unitful
+            new_static_unitful = _sub_unitful(x.static_unitful, y.static_unitful)
         result = UnitfulTracer(unit=x.unit, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="subtract",
@@ -432,26 +369,13 @@ def subtract(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _sub_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, StaticArrayLike | Unitful)
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _sub_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, StaticArrayLike | Unitful)
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _sub_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for subtract: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for subtract: {y}"
-    result = x - y
-    assert isinstance(result, get_args(AnyArrayLike))
+    result = binary_op_from_func(
+        unitful_handler=_sub_unitful,
+        tracer_handler=_sub_tracer,
+        standard_handler=lambda x, y: x - y,
+        x=x,
+        y=y,
+    )
     return result
 
 
@@ -558,16 +482,7 @@ def divide(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         new_unit = Unit(unit_dict)
         new_val = x.val / y.val
         new_scale = x.scale - y.scale
-        return Unitful(val=new_val, unit=new_unit, scale=new_scale, optimize_scale=False)
-
-    if isinstance(x, Unitful) and isinstance(y, Unitful):
-        return _div_unitful(x, y)
-    elif isinstance(x, Unitful) and not isinstance(y, (Unitful | UnitfulTracer)):
-        y_unitful = Unitful(val=y)
-        return _div_unitful(x, y_unitful)
-    elif not isinstance(x, (Unitful | UnitfulTracer)) and isinstance(y, Unitful):
-        x_unitful = Unitful(val=x)
-        return _div_unitful(x_unitful, y)
+        return Unitful(val=new_val, unit=new_unit, scale=new_scale)
 
     # Tracer handling
     def _div_tracer(x: UnitfulTracer, y: UnitfulTracer):
@@ -583,7 +498,7 @@ def divide(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
             new_unit = x.unit
         new_static_unitful = None
         if x.static_unitful is not None and y.static_unitful is not None:
-            new_static_unitful = x.static_unitful / y.static_unitful
+            new_static_unitful = _div_unitful(x.static_unitful, y.static_unitful)
         result = UnitfulTracer(unit=new_unit, static_unitful=new_static_unitful)
         node = OperatorNode(
             op_name="divide",
@@ -593,24 +508,11 @@ def divide(x: AnyUnitType, y: AnyUnitType) -> AnyUnitType:
         register_node_full(node)
         return result
 
-    if isinstance(x, UnitfulTracer) and isinstance(y, UnitfulTracer):
-        return _div_tracer(x, y)
-    if isinstance(x, UnitfulTracer):
-        assert isinstance(y, StaticArrayLike | Unitful)
-        y_unitful = Unitful(val=y) if not isinstance(y, Unitful) else y
-        tracer_unit = None if not isinstance(y, Unitful) else y.unit
-        y_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=y_unitful, value=y)
-        return _div_tracer(x, y_tracer)
-    if isinstance(y, UnitfulTracer):
-        assert isinstance(x, StaticArrayLike | Unitful)
-        x_unitful = Unitful(val=x) if not isinstance(x, Unitful) else x
-        tracer_unit = None if not isinstance(x, Unitful) else x.unit
-        x_tracer = UnitfulTracer(unit=tracer_unit, static_unitful=x_unitful, value=x)
-        return _div_tracer(x_tracer, y)
-
-    # any other array-like
-    assert isinstance(x, get_args(AnyArrayLike)), f"Invalid input type for divide: {x}"
-    assert isinstance(y, get_args(AnyArrayLike)), f"Invalid input type for divide: {y}"
-    result = x / y
-    assert isinstance(result, get_args(AnyArrayLike))
+    result = binary_op_from_func(
+        unitful_handler=_div_unitful,
+        tracer_handler=_div_tracer,
+        standard_handler=lambda x, y: x / y,
+        x=x,
+        y=y,
+    )
     return result

@@ -1,11 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass
 
 import rustworkx
 from rustworkx import PyDiGraph
 from rustworkx.visualization import mpl_draw
 
-from quantax.tracing.nodes import OperatorNode, TraceData, GraphData
+from quantax.tracing.nodes import GraphData, OperatorNode, TraceData
 from quantax.tracing.tracer import UnitfulTracer
 
 
@@ -51,7 +50,7 @@ def get_label_from_node(node) -> str:
     raise Exception("This should never happen")
 
 
-def plot_graph_data(
+def plot_graph(
     graph: PyDiGraph,
 ):
     mpl_draw(

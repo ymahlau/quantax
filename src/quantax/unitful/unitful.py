@@ -30,7 +30,7 @@ class Unitful(TreeClass):
     unit: Unit = frozen_field(default=EMPTY_UNIT)
     scale: int = frozen_field(default=0)
     optimize_scale: bool = frozen_field(default=True)
-    
+
     # Tell NumPy that this class takes priority in operations
     __array_priority__ = 1000
 
@@ -47,7 +47,7 @@ class Unitful(TreeClass):
 
     def __post_init__(self):
         from quantax.tracing.glob import get_global_replay_data
-        
+
         self._validate()
         # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
         if get_global_replay_data() is not None:
@@ -297,8 +297,6 @@ def can_optimize_scale(obj: Unitful | AnyArrayLike) -> bool:
     if isinstance(v, get_args(NonPhysicalArrayLike)):
         return False
     if isinstance(v, (jax.Array, np.ndarray)) and v.dtype not in PHYSICAL_DTYPES:
-        return False
-    if is_traced(v) and not isinstance(obj, Unitful):
         return False
     if is_traced(v):
         return False

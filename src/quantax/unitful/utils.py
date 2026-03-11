@@ -1,11 +1,8 @@
 from typing import Any, get_args
 
 import jax
-import numpy as np
 
-from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
-from quantax.core.jax import is_traced
-from quantax.core.typing import AnyArrayLike, StaticArrayLike
+from quantax.core.typing import AnyArrayLike
 from quantax.unitful.unitful import Unitful
 
 
@@ -44,4 +41,3 @@ def get_shape_dtype(
     if not hasattr(val, "dtype"):
         return None
     return jax.ShapeDtypeStruct(val.shape, val.dtype)
-    

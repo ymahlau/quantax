@@ -1,6 +1,4 @@
 from __future__ import annotations
-from quantax.functional.numpy.comparisons import le, lt, ge, gt, eq, ne, array_equal, get_array_equal_original
-from quantax.functional.numpy.comparisons import constraints_comparison, get_le_original, get_lt_original, get_ge_original, get_gt_original, get_eq_original, get_ne_original
 
 from typing import Callable
 
@@ -17,6 +15,23 @@ from quantax.functional.numpy.basic import (
     get_subtract_original,
     multiply,
     subtract,
+)
+from quantax.functional.numpy.comparisons import (
+    array_equal,
+    constraints_comparison,
+    eq,
+    ge,
+    get_array_equal_original,
+    get_eq_original,
+    get_ge_original,
+    get_gt_original,
+    get_le_original,
+    get_lt_original,
+    get_ne_original,
+    gt,
+    le,
+    lt,
+    ne,
 )
 
 CONSTRAINTS_DICT: dict[str, Callable] = {
@@ -42,9 +57,9 @@ FUNCTION_DICT: dict[str, Callable] = {
     "noop": noop,
     "le": le,
     "lt": lt,
-    "ge": ge, 
-    "gt": gt, 
-    "eq": eq, 
+    "ge": ge,
+    "gt": gt,
+    "eq": eq,
     "ne": ne,
     "array_equal": array_equal,
 }

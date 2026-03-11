@@ -1,7 +1,3 @@
-from quantax.tracing.glob import get_global_trace_data
-from quantax.tracing.types import AnyUnitType
-from quantax.unitful.utils import get_shape_dtype
-from quantax.tracing.tracer import UnitfulTracer
 from typing import Any, get_args
 
 import jax
@@ -9,7 +5,10 @@ import numpy as np
 
 from quantax.core.constants import MAX_STATIC_OPTIMIZED_SIZE
 from quantax.core.jax import is_traced
-from quantax.core.typing import AnyArrayLike, StaticArrayLike, ShapedArrayLike
+from quantax.core.typing import AnyArrayLike, StaticArrayLike
+from quantax.tracing.glob import get_global_trace_data
+from quantax.tracing.tracer import UnitfulTracer
+from quantax.tracing.types import AnyUnitType
 from quantax.unitful.unitful import Unitful
 
 
@@ -22,16 +21,10 @@ def convert_to_tracer(data):
         # if we already have a tracer, just return the tracer
         if isinstance(x, UnitfulTracer):
             return x
-        
-        if isinstance(x, get_args(ShapedArrayLike)):
-            sd = jax.ShapeDtypeStruct(shape=x.shape, dtype=x.dtype)
-        else:
-            sd = None
 
         static_unitful = get_static_operand(x)
         return UnitfulTracer(
             unit=x.unit if isinstance(x, Unitful) else None,
-            val_shape_dtype=sd,
             static_unitful=static_unitful,
             value=x,
         )
@@ -39,7 +32,7 @@ def convert_to_tracer(data):
     # IMPORTANT: we cannot use parallel tree_map here, because Tracer creation is linked to global list with an id.
     # race conditions may occur
     leaves, treedef = jax.tree.flatten(
-        tree=data, 
+        tree=data,
         is_leaf=lambda x: isinstance(x, (Unitful, UnitfulTracer)),
     )
     converted_leaves = []
@@ -59,36 +52,39 @@ def convert_input(val: AnyUnitType) -> AnyUnitType:
     if global_data is None:
         assert not isinstance(val, UnitfulTracer), f"operation got tracer input, outside of tracing context: {val}"
         return val
-    
+
     # tracer and standard values are left as is.
     if not isinstance(val, (Unitful, jax.Array)):
         return val
-    
+
     # if we are tracing and input is jax array / Unitful, convert to unitful
     val_orig = val
     if isinstance(val, jax.Array):
         assert not is_traced(val), f"jax tracer detected during quantax tracing. This should never happen: {val}"
         val = Unitful(val=val)
-        
+
     return UnitfulTracer(
         unit=None if isinstance(val_orig, jax.Array) else val.unit,
-        val_shape_dtype=get_shape_dtype(val),
         static_unitful=get_static_operand(val),
         value=val_orig,
     )
 
 
 def get_arg_kwarg_tracer_list(args, kwargs) -> list[UnitfulTracer]:
-    tracer_list = []
+    return list(get_arg_kwarg_tracer_dict(args, kwargs).values())
+
+
+def get_arg_kwarg_tracer_dict(args, kwargs) -> dict[str, UnitfulTracer]:
+    op_kwargs = {}
     arg_leaves, arg_treedef = jax.tree.flatten(args, is_leaf=lambda x: isinstance(x, UnitfulTracer))
     for idx, la in enumerate(arg_leaves):
         assert isinstance(la, UnitfulTracer)
-        tracer_list.append(la)
+        op_kwargs[f"a_{idx}"] = la
     kwarg_leaves, kwarg_treedef = jax.tree.flatten(kwargs, is_leaf=lambda x: isinstance(x, UnitfulTracer))
     for idx, lk in enumerate(kwarg_leaves):
         assert isinstance(lk, UnitfulTracer)
-        tracer_list.append(lk)
-    return tracer_list
+        op_kwargs[f"k_{idx}"] = lk
+    return op_kwargs
 
 
 def check_jax_unitful_tracer_type(

@@ -48,10 +48,6 @@ def noop(x: jax.Array) -> jax.Array: ...
 def noop(x: np.ndarray) -> np.ndarray: ...
 
 
-@overload
-def noop(x: np.ndarray) -> np.ndarray: ...
-
-
 def noop(x: AnyUnitType) -> AnyUnitType:
     # non-tracer
     if not isinstance(x, UnitfulTracer):
@@ -60,7 +56,6 @@ def noop(x: AnyUnitType) -> AnyUnitType:
     # tracer
     x_cpy = UnitfulTracer(
         unit=x.unit,
-        val_shape_dtype=x.val_shape_dtype,
         static_unitful=x.static_unitful,
         value=x.value,
     )
