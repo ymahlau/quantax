@@ -17,7 +17,7 @@ def binary_op_from_func(
     # input conversion to tracer if necessary
     x = convert_input(x)
     y = convert_input(y)
-    
+
     # handle unitful inputs
     if isinstance(x, Unitful) and isinstance(y, Unitful):
         return unitful_handler(x, y)
@@ -34,16 +34,16 @@ def binary_op_from_func(
     if isinstance(x, UnitfulTracer):
         assert isinstance(y, StaticArrayLike | Unitful)
         y_tracer = UnitfulTracer(
-            unit=None if not isinstance(y, Unitful) else y.unit, 
-            static_unitful=get_static_operand(y), 
+            unit=None if not isinstance(y, Unitful) else y.unit,
+            static_unitful=get_static_operand(y),
             value=y,
         )
         return tracer_handler(x, y_tracer)
     if isinstance(y, UnitfulTracer):
         assert isinstance(x, StaticArrayLike | Unitful)
         x_tracer = UnitfulTracer(
-            unit=None if not isinstance(x, Unitful) else x.unit, 
-            static_unitful=get_static_operand(x), 
+            unit=None if not isinstance(x, Unitful) else x.unit,
+            static_unitful=get_static_operand(x),
             value=x,
         )
         return tracer_handler(x_tracer, y)
@@ -54,6 +54,3 @@ def binary_op_from_func(
     result = standard_handler(x, y)
     assert isinstance(result, get_args(AnyArrayLike))
     return result
-
-
-
