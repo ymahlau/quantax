@@ -62,10 +62,19 @@ NonPhysicalArrayLike = Union[
     np.bool,
 ]
 
+# Types who have a shape/dtype attribute
+ShapedArrayLike = Union[
+    np.number,
+    np.bool,
+    np.ndarray,
+    jax.Array,
+]
+
+# All array-like types
 AnyArrayLike = Union[
     int,
     bool,
-    np.bool,
+    np.bool_,
     float,
     complex,
     np.number,

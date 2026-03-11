@@ -1,14 +1,16 @@
+from __future__ import annotations
+
+import inspect
 import math
-from typing import Any, Sequence
+import types
+from typing import Any, Callable, Sequence, get_args
 
 import jax
-import jax.numpy as jnp
 import numpy as np
-from frozendict import frozendict
-from jax import core
 
-from quantax.fraction import Fraction
-from quantax.typing import SI, PhysicalArrayLike
+from quantax.core.jax import is_traced
+from quantax.core.typing import NonPhysicalArrayLike, PhysicalArrayLike, StaticArrayLike
+from quantax.core.unit import Unit
 
 
 def handle_n_scales(
@@ -152,9 +154,18 @@ def best_scale(
 
 
 def dim_after_multiplication(
-    dim1: dict[SI, int | Fraction] | frozendict[SI, int | Fraction],
-    dim2: dict[SI, int | Fraction] | frozendict[SI, int | Fraction],
-) -> frozendict[SI, int | Fraction]:
+    dim1: Unit | None,
+    dim2: Unit | None,
+) -> Unit | None:
+    # simple checks
+    if dim1 is None and dim2 is None:
+        return None
+    if dim1 is None:
+        return dim2
+    if dim2 is None:
+        return dim1
+
+    # both are actually units
     unit_dict = {k: v for k, v in dim1.items()}
     for k, v in dim2.items():
         if k in unit_dict:
@@ -163,32 +174,30 @@ def dim_after_multiplication(
                 del unit_dict[k]
         else:
             unit_dict[k] = v
-    return frozendict(unit_dict)
+    return Unit(unit_dict)
 
 
 def is_struct_optimizable(a: Any) -> bool:
     if is_traced(a):
         return False
-    if isinstance(a, PhysicalArrayLike):
+    if isinstance(a, get_args(PhysicalArrayLike)):
         return True
     if isinstance(a, Sequence):
         return all([is_struct_optimizable(a_i) for a_i in a])
     return False
 
 
-def is_currently_compiling() -> bool:
-    return isinstance(
-        jnp._orig_array(1) + 1,  # ty:ignore[unresolved-attribute]
-        core.Tracer,
-    )
+def can_perform_static_ops(x: StaticArrayLike | None):
+    if x is None:
+        return False
+    if isinstance(x, get_args(NonPhysicalArrayLike)):
+        return False
+    return True
 
 
-def is_traced(x) -> bool:
-    return isinstance(x, core.Tracer)
-
-
-def hash_abstract_pytree(tree) -> int:
-    avals = jax.tree.map(lambda x: jax.eval_shape(lambda: x) if isinstance(x, jax.Array) else x, tree)
-    flat_avals, treedef = jax.tree.flatten(avals)
-    flat_avals_tuple = tuple(flat_avals)
-    return hash((flat_avals_tuple, treedef))
+def get_all_closure_vars(fn: Callable):
+    closure_vars = inspect.getclosurevars(fn)
+    non_module_globals = {
+        name: value for name, value in closure_vars.globals.items() if not isinstance(value, types.ModuleType)
+    }
+    return closure_vars.nonlocals, non_module_globals
