@@ -4,7 +4,7 @@ from quantax.unitful.unitful import Unitful
 from rustworkx import PyDiGraph
 from abc import abstractmethod, ABC
 import jax
-from typing import Any
+from typing import Any, ParamSpec, TypeVar, Generic
 from quantax.tracing.tracer import UnitfulTracer
 from dataclasses import dataclass, field
 
@@ -20,7 +20,6 @@ class GraphData:
 
 @dataclass(kw_only=True)
 class GlobalReplayData:
-    graph_data_dict: dict[int, list[GraphData]]
     scale_assignment: ScaleAssignment
     value_dict: dict[int, Unitful | AnyArrayLike] = field(default_factory=dict)
 
@@ -44,9 +43,11 @@ class GlobalTraceData:
     def __len__(self) -> int:
         return len(self.pure_operator_nodes) + len(self.tracer_nodes) + len(self.fn_transform_nodes)
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
 @dataclass(kw_only=True)
-class TraceData:
+class TraceData(Generic[P, R]):
     output_tracer: Any = field(default=None)  # struct of tracers
     trace_args: Any = field(default=None)  # struct of tracers
     trace_kwargs: dict[str, Any] = field(default_factory=dict)  # struct of tracers

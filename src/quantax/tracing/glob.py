@@ -12,8 +12,10 @@ import jax
 from rustworkx import PyDiGraph
 
 from quantax.core.typing import AnyArrayLike
-from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
+
+if TYPE_CHECKING:
+    from quantax.tracing.tracer import UnitfulTracer
 
 
 _current_node: ContextVar[FunctionTransformNode | None] = ContextVar("current_node", default=None)
@@ -74,16 +76,12 @@ def replay_context(
     global_trace_data: GlobalTraceData,
 ):
     assert _global_replay_data.get() is None, "Replay end not called properly before starting new replay"
-    
-    # compute topological ordering for every node
-    data_dict = {
-        n.id: [create_graph_from_trace(td) for td in n.fn_tracers] 
-        for n in global_trace_data.fn_transform_nodes.values()
-    }
+    assert _global_trace_data.get() is None, "Cannot replay while tracing at the same time"
+    assert _current_trace_data.get() is None, "Cannot replay while tracing at the same time"
+    assert _current_node.get() is None, "Cannot replay while having node marked for tracing"
 
     # set replay data struct
     global_replay_data = GlobalReplayData(
-        graph_data_dict=data_dict,
         scale_assignment=scale_assignment,
     )
     token = _global_replay_data.set(global_replay_data)
@@ -157,7 +155,7 @@ def register_tracer(t: UnitfulTracer):
         current_td.tracer_nodes[t.id] = t
 
 
-def register_tracer_for_current_context(tracer_list: list[UnitfulTracer]):
+def register_tracers_for_current_context(tracer_list: list[UnitfulTracer]):
     current_td = get_current_trace_data()
     assert current_td is not None
     for t in tracer_list:

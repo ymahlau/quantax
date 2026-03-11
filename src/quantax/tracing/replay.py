@@ -1,35 +1,37 @@
 from __future__ import annotations
+from quantax.tracing.nodes import TraceData
 
-from typing import Any, Callable
+from typing import Any, Callable, ParamSpec, TypeVar
 
 import jax
 
 from quantax.tracing.glob import FunctionTransformNode, OperatorNode, get_global_replay_data
 from quantax.core.typing import AnyArrayLike
 from quantax.functional.collection import FUNCTION_DICT
-from quantax.tracing.graph import GraphData
+from quantax.tracing.graph import GraphData, create_graph_from_trace
 from quantax.tracing.tracer import UnitfulTracer
 from quantax.unitful.unitful import Unitful
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
 def get_replay_function(
-    graph_data: GraphData,
-    trace_args: Any,
-    trace_kwargs: dict[str, Any],
-    trace_result: Any,
-) -> Callable:
+    trace_data: TraceData[P, R]
+) -> Callable[P, R]:
+    graph_data = create_graph_from_trace(trace_data)
+    
     args_trace_leaves, args_trace_treedef = jax.tree.flatten(
-        tree=trace_args, is_leaf=lambda x: isinstance(x, UnitfulTracer)
+        tree=trace_data.trace_args, is_leaf=lambda x: isinstance(x, UnitfulTracer)
     )
     kwargs_trace_leaves, kwargs_trace_treedef = jax.tree.flatten(
-        tree=trace_kwargs, is_leaf=lambda x: isinstance(x, UnitfulTracer)
+        tree=trace_data.trace_kwargs, is_leaf=lambda x: isinstance(x, UnitfulTracer)
     )
     result_trace_leaves, result_trace_treedef = jax.tree.flatten(
-        tree=trace_result, is_leaf=lambda x: isinstance(x, UnitfulTracer)
+        tree=trace_data.output_tracer, is_leaf=lambda x: isinstance(x, UnitfulTracer)
     )
 
     # define the actual replay function
-    def replay_func(*args, **kwargs):
+    def replay_func(*args: P.args, **kwargs: P.kwargs) -> R:
         local_value_dict: dict[int, Unitful | AnyArrayLike] = {}
         args_leaves, args_treedef = jax.tree.flatten(args, lambda x: isinstance(x, Unitful))
         kwargs_leaves, kwargs_treedef = jax.tree.flatten(kwargs, lambda x: isinstance(x, Unitful))

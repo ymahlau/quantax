@@ -6,7 +6,6 @@ from typing import Any, get_args
 import jax
 import numpy as np
 
-from quantax.tracing.glob import register_tracer
 from quantax.core.typing import AnyArrayLike, StaticArrayLike
 from quantax.core.unit import Unit
 from quantax.unitful.unitful import Unitful
@@ -24,7 +23,10 @@ class UnitfulTracer:
     value: Unitful | AnyArrayLike | None = field(default=None)
 
     def __post_init__(self):
+        # tracer registers itself. local import cannot be avoided here
+        from quantax.tracing.glob import register_tracer
         register_tracer(self)
+        
         if self.static_unitful is not None:
             # if the tracer is coming from a global jax value (closure), then we need to convert the jax value to numpy
             # this does not change the function behavior, because global jax values are treated as constants anyways
@@ -43,3 +45,6 @@ class UnitfulTracer:
         from quantax.functional.numpy.basic import multiply
 
         return multiply(other, self)  # ty:ignore[no-matching-overload]
+
+
+

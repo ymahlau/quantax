@@ -12,7 +12,9 @@ import jax
 from quantax.tracing.glob import (
     FunctionTransformNode,
     fn_trace_context,
-    register_tracer_for_current_context, TraceData, get_global_trace_data, get_current_node,
+    TraceData, 
+    get_global_trace_data, 
+    get_current_node, register_tracers_for_current_context,
 )
 from quantax.functional.artificial import noop
 from quantax.tracing.tracer import UnitfulTracer
@@ -26,14 +28,14 @@ class TracedFunction(Generic[P, R]):
     def __init__(self, fn: Callable[P, R]) -> None:
         self.fn = fn
         
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> tuple[R, TraceData]:
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> tuple[R, TraceData[P, R]]:
         
         with fn_trace_context() as trace_data:
             # convert function input to tracer, register for current context
             traced_args = convert_to_tracer(args)
             traced_kwargs = convert_to_tracer(kwargs)
             input_tracers = get_arg_kwarg_tracer_list(traced_args, traced_kwargs)
-            register_tracer_for_current_context(input_tracers)
+            register_tracers_for_current_context(input_tracers)
             
             # run the function
             result = self.fn(*traced_args, **traced_kwargs)
@@ -53,7 +55,7 @@ class TracedFunction(Generic[P, R]):
         return result_copy, trace_data
 
 
-def trace(fn: Callable[P, R]) -> Callable[P, tuple[R, TraceData]]:
+def trace(fn: Callable[P, R]) -> Callable[P, tuple[R, TraceData[P, R]]]:
     traced = TracedFunction(fn=fn)
     return traced
 

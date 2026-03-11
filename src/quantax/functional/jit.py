@@ -15,7 +15,6 @@ from quantax.tracing.glob import (
     node_context,
     register_node_input_output,
     register_node_pointer,
-    register_tracer_for_current_context,
     replay_context,
 )
 from quantax.core.typing import AnyArrayLike, ShapedArrayLike

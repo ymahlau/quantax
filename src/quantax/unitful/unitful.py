@@ -7,7 +7,6 @@ import jax.numpy as jnp
 import numpy as np
 from pytreeclass import tree_repr
 
-from quantax.core import glob
 from quantax.core.pytrees import TreeClass, autoinit, frozen_field
 from quantax.core.typing import (
     PHYSICAL_DTYPES,
@@ -47,9 +46,11 @@ class Unitful(TreeClass):
                 raise Exception(f"Cannot have non-empty dimension for non-physical {self}")
 
     def __post_init__(self):
+        from quantax.tracing.glob import get_global_replay_data
+        
         self._validate()
         # we do not want to optimize the scale during replay. During replay we want to use the calculated values from MILP
-        if glob.get_global_replay_data() is not None:
+        if get_global_replay_data() is not None:
             self.optimize_scale = False
         if not self.optimize_scale or not can_optimize_scale(self):
             return
